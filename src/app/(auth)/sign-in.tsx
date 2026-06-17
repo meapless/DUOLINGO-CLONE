@@ -110,10 +110,10 @@ export default function SignIn() {
           <Text className="absolute left-10 top-4 text-2xl text-warning">
             ✦
           </Text>
-          <Text className="absolute right-12 top-2 text-lg text-brand-blue">
+          <Text className="absolute right-12 top-2 text-lg text-lingua-blue">
             ✦
           </Text>
-          <Text className="absolute right-8 bottom-6 text-xl text-brand-purple">
+          <Text className="absolute right-8 bottom-6 text-xl text-lingua-purple">
             ✦
           </Text>
           <Image
@@ -169,7 +169,7 @@ export default function SignIn() {
           disabled={submitting}
           onPress={handleSendMagicCode}
         >
-          <Text className="font-poppins-semibold text-body-md text-brand-purple">
+          <Text className="font-poppins-semibold text-body-md text-lingua-purple">
             Email me a magic code instead
           </Text>
         </TouchableOpacity>
@@ -183,7 +183,7 @@ export default function SignIn() {
             Don&apos;t have an account?{" "}
           </Text>
           <TouchableOpacity onPress={() => router.replace("/sign-up")}>
-            <Text className="font-poppins-bold text-body-md text-brand-purple">
+            <Text className="font-poppins-bold text-body-md text-lingua-purple">
               Sign up
             </Text>
           </TouchableOpacity>

@@ -26,7 +26,7 @@ export default function Onboarding() {
         <View className="mt-8">
           <Text className="heading--h1">
             Your AI language{" "}
-            <Text className="heading--h1 text-brand-purple">teacher.</Text>
+            <Text className="heading--h1 text-lingua-purple">teacher.</Text>
           </Text>
           <Text className="body--md mt-3">
             Real conversations, personalized lessons, anytime, anywhere.
@@ -47,7 +47,7 @@ export default function Onboarding() {
             className="absolute right-4 top-2 z-10 rounded-2xl px-4 py-2"
             style={{ backgroundColor: "#ECE8FD" }}
           >
-            <Text className="font-poppins-semibold text-body-md text-brand-purple">
+            <Text className="font-poppins-semibold text-body-md text-lingua-purple">
               ¡Hola!
             </Text>
           </View>

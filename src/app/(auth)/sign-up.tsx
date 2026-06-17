@@ -110,10 +110,10 @@ export default function SignUp() {
           <Text className="absolute left-10 top-4 text-2xl text-warning">
             ✦
           </Text>
-          <Text className="absolute right-12 top-2 text-lg text-brand-blue">
+          <Text className="absolute right-12 top-2 text-lg text-lingua-blue">
             ✦
           </Text>
-          <Text className="absolute right-8 bottom-6 text-xl text-brand-purple">
+          <Text className="absolute right-8 bottom-6 text-xl text-lingua-purple">
             ✦
           </Text>
           <Image
@@ -174,7 +174,7 @@ export default function SignUp() {
             Already have an account?{" "}
           </Text>
           <TouchableOpacity onPress={() => router.replace("/sign-in")}>
-            <Text className="font-poppins-bold text-body-md text-brand-purple">
+            <Text className="font-poppins-bold text-body-md text-lingua-purple">
               Log in
             </Text>
           </TouchableOpacity>

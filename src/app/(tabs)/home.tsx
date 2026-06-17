@@ -86,7 +86,7 @@ export default function HomeScreen() {
       title: "Lesson",
       subtitle: firstLesson?.title ?? "Start your first lesson",
       Icon: LearnIcon,
-      bg: colors.brand.purple,
+      bg: colors.lingua.purple,
       done: true,
     },
     {
@@ -94,7 +94,7 @@ export default function HomeScreen() {
       title: "AI Conversation",
       subtitle: conversation?.description ?? "Talk about your day",
       Icon: HeadphonesIcon,
-      bg: colors.brand.blue,
+      bg: colors.lingua.blue,
       done: false,
     },
     {
@@ -176,8 +176,8 @@ export default function HomeScreen() {
           <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
             <Defs>
               <SvgLinearGradient id="continueGrad" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor={colors.brand.purple} />
-                <Stop offset="1" stopColor={colors.brand.blue} />
+                <Stop offset="0" stopColor={colors.lingua.purple} />
+                <Stop offset="1" stopColor={colors.lingua.blue} />
               </SvgLinearGradient>
             </Defs>
             <Rect x="0" y="0" width="100%" height="100%" fill="url(#continueGrad)" />
@@ -206,7 +206,7 @@ export default function HomeScreen() {
               onPress={() => router.push("/learn")}
               className="mt-4 self-start rounded-full bg-white px-7 py-3"
             >
-              <Text className="font-poppins-bold text-body-md text-brand-purple">
+              <Text className="font-poppins-bold text-body-md text-lingua-purple">
                 Continue
               </Text>
             </Pressable>
@@ -217,7 +217,7 @@ export default function HomeScreen() {
         <View className="mt-7 flex-row items-center justify-between">
           <Text className="heading--h3">Today&apos;s plan</Text>
           <Pressable onPress={() => router.push("/learn")} hitSlop={8}>
-            <Text className="font-poppins-semibold text-body-md text-brand-purple">
+            <Text className="font-poppins-semibold text-body-md text-lingua-purple">
               View all
             </Text>
           </Pressable>
@@ -245,7 +245,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
               {item.done ? (
-                <View className="h-7 w-7 items-center justify-center rounded-full bg-brand-purple">
+                <View className="h-7 w-7 items-center justify-center rounded-full bg-lingua-purple">
                   <CheckIcon size={15} color="#ffffff" />
                 </View>
               ) : (

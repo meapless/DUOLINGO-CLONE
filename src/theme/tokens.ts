@@ -1,5 +1,5 @@
 export const colors = {
-  brand: {
+  lingua: {
     purple: "#6c4ef5",
     deepPurple: "#5b3bf6",
     blue: "#4d88ff",

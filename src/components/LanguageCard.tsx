@@ -26,7 +26,7 @@ export default function LanguageCard({
       // Border color is themed via className; background + shadow are inline
       // because they are dynamic / platform-specific (see AGENTS style rules).
       className={`mb-3 flex-row items-center rounded-2xl border p-3 ${
-        selected ? "border-brand-purple" : "border-transparent"
+        selected ? "border-lingua-purple" : "border-transparent"
       }`}
       style={[
         styles.shadow,
@@ -52,7 +52,7 @@ export default function LanguageCard({
 
       {/* Right indicator */}
       {selected ? (
-        <View className="h-7 w-7 items-center justify-center rounded-full bg-brand-purple">
+        <View className="h-7 w-7 items-center justify-center rounded-full bg-lingua-purple">
           <CheckIcon />
         </View>
       ) : (

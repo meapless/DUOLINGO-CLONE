@@ -1,7 +1,4 @@
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
-@import "tailwindcss/utilities.css";
-
+@import "tailwindcss";
 @import "nativewind/theme";
 
 /* ─────────────────────────────────────────
@@ -9,10 +6,10 @@
    ───────────────────────────────────────── */
 @theme {
   /* ── Primary Brand Colors ── */
-  --color-brand-purple: #6c4ef5;
-  --color-brand-deep-purple: #5b3bf6;
-  --color-brand-blue: #4d88ff;
-  --color-brand-green: #21c168;
+  --color-lingua-purple: #6c4ef5;
+  --color-lingua-deep-purple: #5b3bf6;
+  --color-lingua-blue: #4d88ff;
+  --color-lingua-green: #21c168;
 
   /* ── Semantic Colors ── */
   --color-success: #21c168;
@@ -70,11 +67,11 @@
   }
 
   .btn--primary {
-    @apply bg-brand-purple;
+    @apply bg-lingua-purple;
   }
 
   .btn--secondary {
-    @apply bg-brand-deep-purple;
+    @apply bg-lingua-deep-purple;
   }
 
   .btn--success {
@@ -187,7 +184,7 @@
   }
 
   .progress__fill {
-    @apply h-full rounded-full bg-brand-purple;
+    @apply h-full rounded-full bg-lingua-purple;
   }
 
   .progress__fill--success {
@@ -200,7 +197,7 @@
   }
 
   .lesson-card--active {
-    @apply rounded-xl bg-brand-purple p-4;
+    @apply rounded-xl bg-lingua-purple p-4;
   }
 
   .lesson-card--completed {

@@ -140,7 +140,7 @@ export default function VerificationModal({
                         error
                           ? "border-error bg-background"
                           : isActive || isFilled
-                            ? "border-brand-purple bg-surface"
+                            ? "border-lingua-purple bg-surface"
                             : "border-border bg-background"
                       }`}
                     >
@@ -193,7 +193,7 @@ export default function VerificationModal({
             >
               <Text className="font-poppins-medium text-body-sm text-text-secondary">
                 Didn&apos;t get a code?{" "}
-                <Text className="font-poppins-semibold text-brand-purple">
+                <Text className="font-poppins-semibold text-lingua-purple">
                   Resend
                 </Text>
               </Text>
