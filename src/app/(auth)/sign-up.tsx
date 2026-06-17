@@ -34,22 +34,31 @@ export default function SignUp() {
     if (!email || !password || submitting) return;
     setFormError(null);
 
-    const { error } = await signUp.password({
-      emailAddress: email,
-      password,
-    });
-    if (error) {
-      setFormError(getClerkErrorMessage(error));
-      return;
-    }
+    try {
+      const { error } = await signUp.password({
+        emailAddress: email,
+        password,
+      });
+      if (error) {
+        setFormError(getClerkErrorMessage(error));
+        return;
+      }
 
-    const { error: sendError } = await signUp.verifications.sendEmailCode();
-    if (sendError) {
-      setFormError(getClerkErrorMessage(sendError));
-      return;
-    }
+      const { error: sendError } = await signUp.verifications.sendEmailCode();
+      if (sendError) {
+        setFormError(getClerkErrorMessage(sendError));
+        return;
+      }
 
-    setShowVerification(true);
+      setShowVerification(true);
+    } catch (err) {
+      const unexpectedError =
+        err instanceof Error
+          ? { message: err.message }
+          : { message: "Unexpected sign-up error." };
+
+      setFormError(getClerkErrorMessage(unexpectedError));
+    }
   };
 
   // Verify the emailed code, then finalize the session and go home.
