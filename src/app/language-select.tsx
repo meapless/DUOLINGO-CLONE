@@ -11,16 +11,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  SearchIcon,
-} from "@/components/icons";
+import { ChevronLeftIcon, SearchIcon } from "@/components/icons";
+import LanguageCard from "@/components/LanguageCard";
 import { images } from "@/constants/images";
 import { getAvailableLanguages } from "@/data/languages";
 import { useLanguageStore } from "@/store/useLanguageStore";
-import type { Language, LanguageCode } from "@/types/learning";
+import type { LanguageCode } from "@/types/learning";
 
 export default function LanguageSelect() {
   const router = useRouter();
@@ -55,10 +51,7 @@ export default function LanguageSelect() {
   };
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#ffffff" }}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#ffffff" }}>
       <View className="flex-1">
         {/* ── Header ── */}
         <View className="relative h-12 flex-row items-center justify-center px-6">
@@ -99,7 +92,7 @@ export default function LanguageSelect() {
           </Text>
 
           {filtered.map((language) => (
-            <LanguageRow
+            <LanguageCard
               key={language.code}
               language={language}
               selected={language.code === selected}
@@ -126,66 +119,20 @@ export default function LanguageSelect() {
           </TouchableOpacity>
         </View>
 
-        {/* Earth illustration — full width, flush to the bottom edge. The asset
-            is a square with transparent padding, so we render it at full width
-            and clip it into a short band, nudged up so the landmarks sit near
-            the top and the globe's base runs off the bottom like the design. */}
+        {/* Earth illustration — full width at the bottom. The asset is a square
+            with transparent padding around the scene, so we render it full width
+            and clip it into a band that reveals the landmarks, the green globe,
+            and the water, with only the very bottom curve running off-screen. */}
         <View
-          className="mt-4 w-full overflow-hidden"
-          style={{ height: width * 0.46 }}
+          style={{ height: width * 0.64, width, overflow: "hidden", marginTop: 12 }}
         >
           <Image
             source={images.earth}
             resizeMode="cover"
-            style={{ width: "100%", aspectRatio: 1, marginTop: -width * 0.06 }}
+            style={{ width, height: width, marginTop: -width * 0.07 }}
           />
         </View>
       </View>
     </SafeAreaView>
-  );
-}
-
-type LanguageRowProps = {
-  language: Language;
-  selected: boolean;
-  onPress: () => void;
-};
-
-function LanguageRow({ language, selected, onPress }: LanguageRowProps) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.8}
-      className={`mb-3 flex-row items-center rounded-2xl border p-3 ${
-        selected ? "border-brand-purple" : "border-border"
-      }`}
-      style={selected ? { backgroundColor: "#F4F1FE" } : undefined}
-    >
-      {/* Flag */}
-      <View className="h-11 w-11 overflow-hidden rounded-full bg-surface">
-        <Image
-          source={{ uri: language.flag }}
-          className="h-full w-full"
-          resizeMode="cover"
-        />
-      </View>
-
-      {/* Name + learners */}
-      <View className="ml-3 flex-1">
-        <Text className="font-poppins-semibold text-body-lg text-text-primary">
-          {language.name}
-        </Text>
-        <Text className="body--sm">{language.learners} learners</Text>
-      </View>
-
-      {/* Right indicator */}
-      {selected ? (
-        <View className="h-7 w-7 items-center justify-center rounded-full bg-brand-purple">
-          <CheckIcon />
-        </View>
-      ) : (
-        <ChevronRightIcon />
-      )}
-    </TouchableOpacity>
   );
 }

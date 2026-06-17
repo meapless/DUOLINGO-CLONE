@@ -240,3 +240,95 @@ export function ProfileIcon({ size = 24, color = "#6b7280" }: IconProps) {
     </Svg>
   );
 }
+
+/* ── Home: Flame (streak) ── */
+export function FireIcon({ size = 20, color = "#ff8a00" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2C9 6 6 8 6 13a6 6 0 0012 0c0-2-1-3.5-2-5 0 1.5-1 2.5-2 2.5 1-3-1-6.5-2-8.5z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+/* ── Home: Bell (notifications) ── */
+export function BellIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.73 21a2 2 0 01-3.46 0"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Home: Headphones (AI conversation) ── */
+export function HeadphonesIcon({ size = 24, color = "#ffffff" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 14a8 8 0 0116 0"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 14h1.5a1 1 0 011 1v3a1 1 0 01-1 1H5a2 2 0 01-2-2v-2a1 1 0 011-1z"
+        fill={color}
+      />
+      <Path
+        d="M20 14h-1.5a1 1 0 00-1 1v3a1 1 0 001 1h.5a2 2 0 002-2v-2a1 1 0 00-1-1z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+/* ── Home: Sparkles (new words) ── */
+export function SparklesIcon({ size = 24, color = "#ffffff" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3l1.8 4.4L18 9l-4.2 1.6L12 15l-1.8-4.4L6 9l4.2-1.6z"
+        fill={color}
+      />
+      <Path d="M18.5 14l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill={color} />
+    </Svg>
+  );
+}
+
+/* ── Home: Video camera (AI video call) ── */
+export function VideoIcon({ size = 24, color = "#ffffff" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M2 7.5A1.5 1.5 0 013.5 6h9A1.5 1.5 0 0114 7.5v9A1.5 1.5 0 0112.5 18h-9A1.5 1.5 0 012 16.5z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 10.5l6-3.5v10l-6-3.5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
