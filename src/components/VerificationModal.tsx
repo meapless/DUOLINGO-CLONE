@@ -124,43 +124,55 @@ export default function VerificationModal({
               . Enter it below to continue.
             </Text>
 
-            {/* Code cells */}
-            <View className="mt-6 flex-row gap-2">
-              {cells.map((_, index) => {
-                const digit = code[index] ?? "";
-                const isActive = index === code.length;
-                const isFilled = digit !== "";
-                return (
-                  <View
-                    key={index}
-                    className={`h-14 flex-1 items-center justify-center rounded-2xl border ${
-                      error
-                        ? "border-error bg-background"
-                        : isActive || isFilled
-                          ? "border-brand-purple bg-surface"
-                          : "border-border bg-background"
-                    }`}
-                  >
-                    <Text className="font-poppins-bold text-h3 text-text-primary">
-                      {digit}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+            {/* Code cells. A transparent TextInput is overlaid on top of the
+                cells so a tap lands directly on the input — that reliably
+                re-opens the keyboard even when it's already focused. */}
+            <View className="mt-6">
+              <View className="flex-row gap-2">
+                {cells.map((_, index) => {
+                  const digit = code[index] ?? "";
+                  const isActive = index === code.length;
+                  const isFilled = digit !== "";
+                  return (
+                    <View
+                      key={index}
+                      className={`h-14 flex-1 items-center justify-center rounded-2xl border ${
+                        error
+                          ? "border-error bg-background"
+                          : isActive || isFilled
+                            ? "border-brand-purple bg-surface"
+                            : "border-border bg-background"
+                      }`}
+                    >
+                      <Text className="font-poppins-bold text-h3 text-text-primary">
+                        {digit}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
 
-            {/* Hidden input that actually captures the number-pad entry */}
-            <TextInput
-              ref={inputRef}
-              value={code}
-              onChangeText={handleChange}
-              keyboardType="number-pad"
-              maxLength={CODE_LENGTH}
-              editable={!submitting}
-              textContentType="oneTimeCode"
-              autoComplete="sms-otp"
-              style={{ position: "absolute", opacity: 0, height: 1, width: 1 }}
-            />
+              {/* Invisible input covering the cells; captures number-pad entry */}
+              <TextInput
+                ref={inputRef}
+                value={code}
+                onChangeText={handleChange}
+                keyboardType="number-pad"
+                maxLength={CODE_LENGTH}
+                editable={!submitting}
+                caretHidden
+                textContentType="oneTimeCode"
+                autoComplete="sms-otp"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  opacity: 0,
+                }}
+              />
+            </View>
 
             {/* Status row: spinner while verifying, error otherwise */}
             <View className="mt-4 h-5 items-center justify-center">
