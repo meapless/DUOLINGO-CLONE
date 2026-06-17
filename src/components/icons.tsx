@@ -148,3 +148,95 @@ export function EyeOffIcon({ size = 22, color = "#6b7280" }: IconProps) {
     </Svg>
   );
 }
+
+/* ── Tab: Home (house) ── */
+export function HomeIcon({ size = 24, color = "#6b7280" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Tab: Learn (open book) ── */
+export function LearnIcon({ size = 24, color = "#6b7280" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 6.5C12 5 10.5 4 8 4S3 5 3 5v13s1.5-1 5-1 4 1 4 1m0-12.5C12 5 13.5 4 16 4s5 1 5 1v13s-1.5-1-5-1-4 1-4 1m0-12.5V19"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Tab: AI Teacher (robot) ── */
+export function AITeacherIcon({ size = 24, color = "#6b7280" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2v3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5 8h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M1 13v3M23 13v3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="9" cy="13" r="1.2" fill={color} />
+      <Circle cx="15" cy="13" r="1.2" fill={color} />
+    </Svg>
+  );
+}
+
+/* ── Tab: Chat (speech bubble) ── */
+export function ChatIcon({ size = 24, color = "#6b7280" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Tab: Profile (person) ── */
+export function ProfileIcon({ size = 24, color = "#6b7280" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="12" cy="7" r="4" stroke={color} strokeWidth={2} />
+    </Svg>
+  );
+}
