@@ -1,0 +1,13 @@
+diff --git a/dist/specs/NativeClerkModule.android.js b/dist/specs/NativeClerkModule.android.js
+index deba0f18463ef7a4975b17c2f7a1fa895fce6ff5..bfcffcb6d1b56d9c24df877635e723044de5caa0 100644
+--- a/dist/specs/NativeClerkModule.android.js
++++ b/dist/specs/NativeClerkModule.android.js	
+@@ -1,7 +1,7 @@
+ let expo = require("expo");
+ 
+ //#region src/specs/NativeClerkModule.android.ts
+-var NativeClerkModule_android_default = (0, expo.requireNativeModule)("ClerkExpo");
++var NativeClerkModule_android_default = (0, expo.requireOptionalNativeModule)("ClerkExpo");
+ 
+ //#endregion
+ module.exports = NativeClerkModule_android_default;
