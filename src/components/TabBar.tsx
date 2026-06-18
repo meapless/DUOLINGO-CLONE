@@ -60,6 +60,11 @@ export default function TabBar({
   const activeRouteName = state.routes[state.index]?.name;
   const ActiveIcon = TAB_META[activeRouteName]?.Icon;
 
+  // The AI Teacher audio session is a full-screen experience — hide the tab bar.
+  if (activeRouteName === "ai-teacher") {
+    return null;
+  }
+
   return (
     <View
       style={[styles.container, { paddingBottom: insets.bottom || 12 }]}

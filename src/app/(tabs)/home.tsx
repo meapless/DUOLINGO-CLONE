@@ -241,7 +241,15 @@ export default function HomeScreen() {
                   item_title: item.title,
                   language_code: code,
                 });
-                router.push("/learn");
+                // The AI conversation opens the audio teacher session directly.
+                if (item.key === "conversation") {
+                  router.push({
+                    pathname: "/ai-teacher",
+                    params: conversation ? { lessonId: conversation.id } : {},
+                  });
+                } else {
+                  router.push("/learn");
+                }
               }}
               className="flex-row items-center py-3"
             >

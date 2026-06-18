@@ -151,7 +151,7 @@ export default function AITeacherScreen() {
 
   if (!lesson) {
     return (
-      <SafeAreaView style={styles.root} edges={["top"]}>
+      <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View className="flex-1 items-center justify-center px-8">
           <Image
             source={images.mascotWelcome}
@@ -171,7 +171,7 @@ export default function AITeacherScreen() {
   const goal = lesson.goals[0];
 
   return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
+    <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       {/* ── Header: back · status · video/bell ── */}
       <View className="flex-row items-center px-5 pt-1 pb-3">
         <Pressable onPress={dismiss} hitSlop={8}>
@@ -325,7 +325,7 @@ export default function AITeacherScreen() {
       </View>
 
       {/* ── Feedback ── */}
-      <View className="flex-row px-5 pt-5" style={styles.feedbackRow}>
+      <View className="flex-row px-5 pt-5 pb-3" style={styles.feedbackRow}>
         {FEEDBACK.map((item) => (
           <View key={item.label} style={styles.feedbackCard} className="flex-1">
             <Text className="font-poppins-medium text-caption text-text-secondary">
