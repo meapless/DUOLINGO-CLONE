@@ -1,5 +1,7 @@
+import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import LessonCard, { type LessonStatus } from "@/components/LessonCard";
@@ -39,13 +41,14 @@ function resolveCurrentUnit(
 }
 
 export default function LearnScreen() {
+  const router = useRouter();
+  const posthog = usePostHog();
   const [activeTab, setActiveTab] = useState<Tab>("lessons");
 
   const code = useLanguageStore((s) => s.selectedLanguage);
   const completedLessons = useLessonStore((s) => s.completedLessons);
   const inProgressLessonId = useLessonStore((s) => s.inProgressLessonId);
   const setInProgress = useLessonStore((s) => s.setInProgress);
-  const markCompleted = useLessonStore((s) => s.markCompleted);
 
   const language = code ? getLanguage(code) : undefined;
   const allUnits = code ? getUnitsByLanguage(code) : [];
@@ -59,33 +62,22 @@ export default function LearnScreen() {
   function handleLessonPress(lesson: Lesson) {
     const status = getLessonStatus(lesson, completedLessons, inProgressLessonId);
 
-    if (status === "completed") {
-      Alert.alert(lesson.title, "You've completed this lesson! Would you like to review it?", [
-        { text: "Not now", style: "cancel" },
-        { text: "Review", onPress: () => Alert.alert("Coming soon", "Lesson review is coming in the next update!") },
-      ]);
-      return;
+    // Mark a fresh lesson as in progress before opening the audio session.
+    if (status === "available") {
+      setInProgress(lesson.id);
     }
 
-    if (status === "in-progress") {
-      Alert.alert("Continue lesson", `Resume "${lesson.title}"?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Continue", onPress: () => Alert.alert("Coming soon", "The lesson player is coming in the next update!") },
-      ]);
-      return;
-    }
+    posthog?.capture("lesson_opened", {
+      lesson_id: lesson.id,
+      lesson_type: lesson.type,
+      language_code: code,
+      status,
+    });
 
-    // available — set it as in progress
-    Alert.alert("Start lesson", `Start "${lesson.title}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Start",
-        onPress: () => {
-          setInProgress(lesson.id);
-          Alert.alert("Coming soon", "The lesson player is coming in the next update!");
-        },
-      },
-    ]);
+    router.push({
+      pathname: "/ai-teacher",
+      params: { lessonId: lesson.id },
+    });
   }
 
   if (!code || !currentUnit) {

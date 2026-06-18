@@ -1,4 +1,4 @@
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 type IconProps = {
   size?: number;
@@ -354,6 +354,91 @@ export function VideoIcon({ size = 24, color = "#ffffff" }: IconProps) {
       />
       <Path
         d="M14 10.5l6-3.5v10l-6-3.5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Lesson: Photo camera (toggle teacher view) ── */
+export function CameraIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 8a2 2 0 012-2h1.5l1-1.5A1 1 0 019.3 4h5.4a1 1 0 01.83.5L16.5 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="12" cy="12.5" r="3.2" stroke={color} strokeWidth={2} />
+    </Svg>
+  );
+}
+
+/* ── Lesson: Microphone (talk to the teacher) ── */
+export function MicIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3a3 3 0 00-3 3v5a3 3 0 006 0V6a3 3 0 00-3-3z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M6 11a6 6 0 0012 0M12 17v3M9 20h6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Lesson: Subtitles / closed captions ── */
+export function SubtitlesIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="5" width="18" height="14" rx="3" stroke={color} strokeWidth={2} />
+      <Path
+        d="M9 11.5a2 2 0 100 4M16 11.5a2 2 0 100 4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── Lesson: Phone (end call) ── */
+export function PhoneIcon({ size = 24, color = "#ffffff" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.02-.24 11.36 11.36 0 003.56.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.56 1 1 0 01-.24 1.02z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+/* ── Lesson: Speaker (play the teacher's line) ── */
+export function SpeakerIcon({ size = 22, color = "#6c4ef5" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4z"
+        fill={color}
+      />
+      <Path
+        d="M15.5 8.5a5 5 0 010 7M18.5 6a9 9 0 010 12"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
