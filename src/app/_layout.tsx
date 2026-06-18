@@ -1,10 +1,11 @@
 import "../global.css";
-import { ClerkProvider } from "@clerk/expo";
+import { ClerkProvider, useUser } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { PostHogProvider, usePostHog } from "posthog-react-native";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -15,6 +16,38 @@ if (!publishableKey) {
 }
 
 SplashScreen.preventAutoHideAsync();
+
+function NavigationTracker() {
+  const posthog = usePostHog();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    posthog?.screen(pathname);
+  }, [pathname, posthog]);
+
+  return null;
+}
+
+function UserTracker() {
+  const posthog = usePostHog();
+  const { user, isLoaded } = useUser();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (user) {
+      const email = user.primaryEmailAddress?.emailAddress;
+      const name = user.fullName;
+      posthog?.identify(user.id, {
+        $set: {
+          ...(email && { email }),
+          ...(name && { name }),
+        },
+      });
+    }
+  }, [isLoaded, user, posthog]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -35,8 +68,24 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <Stack screenOptions={{ headerShown: false }} />
-    </ClerkProvider>
+    <PostHogProvider
+      apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY!}
+      options={{
+        host: process.env.EXPO_PUBLIC_POSTHOG_HOST,
+        captureAppLifecycleEvents: true,
+      }}
+      autocapture={{
+        captureScreens: false, // manual tracking via NavigationTracker
+        captureTouches: true,
+        propsToCapture: ["testID"],
+        maxElementsCaptured: 20,
+      }}
+    >
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <NavigationTracker />
+        <UserTracker />
+        <Stack screenOptions={{ headerShown: false }} />
+      </ClerkProvider>
+    </PostHogProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { useMemo, useState } from "react";
 import {
   Image,
@@ -20,6 +21,7 @@ import type { LanguageCode } from "@/types/learning";
 
 export default function LanguageSelect() {
   const router = useRouter();
+  const posthog = usePostHog();
   const { width } = useWindowDimensions();
   const allLanguages = getAvailableLanguages();
 
@@ -44,6 +46,7 @@ export default function LanguageSelect() {
 
   const handleConfirm = () => {
     if (!selected) return;
+    posthog?.capture("language_selected", { language_code: selected });
     // Persist the choice, then go to home. `replace` so the picker isn't left
     // on the back stack (this screen can be the entry point on first launch).
     setLanguage(selected);

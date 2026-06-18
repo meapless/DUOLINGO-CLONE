@@ -1,4 +1,5 @@
 import { useClerk, useUser } from "@clerk/expo";
+import { usePostHog } from "posthog-react-native";
 import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -8,6 +9,7 @@ import { useLanguageStore } from "@/store/useLanguageStore";
 export default function ProfileScreen() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const posthog = usePostHog();
 
   const selectedLanguage = useLanguageStore((s) => s.selectedLanguage);
   const clearLanguage = useLanguageStore((s) => s.clearLanguage);
@@ -36,7 +38,11 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => signOut()}
+          onPress={() => {
+            posthog?.capture("user_signed_out");
+            posthog?.reset();
+            signOut();
+          }}
           activeOpacity={0.9}
           className="btn btn--ghost mt-3 px-8"
         >

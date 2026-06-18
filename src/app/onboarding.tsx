@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -6,6 +7,7 @@ import { images } from "@/constants/images";
 
 export default function Onboarding() {
   const router = useRouter();
+  const posthog = usePostHog();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#ffffff" }}>
@@ -73,7 +75,10 @@ export default function Onboarding() {
         <TouchableOpacity
           className="btn btn--primary mt-4 w-full flex-row"
           activeOpacity={0.9}
-          onPress={() => router.push("/sign-up")}
+          onPress={() => {
+            posthog?.capture("onboarding_get_started");
+            router.push("/sign-up");
+          }}
         >
           <Text className="btn__label">Get Started</Text>
           <View className="absolute bottom-0 right-6 top-0 justify-center">

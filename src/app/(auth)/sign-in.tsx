@@ -1,5 +1,6 @@
 import { useSignIn } from "@clerk/expo";
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import { getClerkErrorMessage } from "@/lib/clerk";
 export default function SignIn() {
   const router = useRouter();
   const { signIn, fetchStatus } = useSignIn();
+  const posthog = usePostHog();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,6 +44,7 @@ export default function SignIn() {
 
     if (signIn.status === "complete") {
       await signIn.finalize();
+      posthog?.capture("user_signed_in", { method: "email_password" });
       router.replace("/");
     } else {
       setFormError("Additional verification is required to sign in.");
@@ -59,6 +62,7 @@ export default function SignIn() {
       return;
     }
 
+    posthog?.capture("magic_code_requested", { email_provided: true });
     setShowVerification(true);
   };
 
@@ -70,6 +74,7 @@ export default function SignIn() {
 
     if (signIn.status === "complete") {
       await signIn.finalize();
+      posthog?.capture("user_signed_in", { method: "magic_code" });
       setShowVerification(false);
       router.replace("/");
       return null;

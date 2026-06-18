@@ -1,5 +1,6 @@
 import { useSignUp } from "@clerk/expo";
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import { getClerkErrorMessage } from "@/lib/clerk";
 export default function SignUp() {
   const router = useRouter();
   const { signUp, fetchStatus } = useSignUp();
+  const posthog = usePostHog();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,12 +42,14 @@ export default function SignUp() {
         password,
       });
       if (error) {
+        posthog?.capture("sign_up_failed", { error_message: getClerkErrorMessage(error), method: "email_password" });
         setFormError(getClerkErrorMessage(error));
         return;
       }
 
       const { error: sendError } = await signUp.verifications.sendEmailCode();
       if (sendError) {
+        posthog?.capture("sign_up_failed", { error_message: getClerkErrorMessage(sendError), method: "email_password" });
         setFormError(getClerkErrorMessage(sendError));
         return;
       }
@@ -57,6 +61,7 @@ export default function SignUp() {
           ? { message: err.message }
           : { message: "Unexpected sign-up error." };
 
+      posthog?.capture("sign_up_failed", { error_message: unexpectedError.message, method: "email_password" });
       setFormError(getClerkErrorMessage(unexpectedError));
     }
   };
@@ -70,6 +75,14 @@ export default function SignUp() {
 
     if (signUp.status === "complete") {
       await signUp.finalize();
+      const userId = signUp.createdUserId;
+      if (userId) {
+        posthog?.identify(userId, {
+          $set: { email },
+          $set_once: { sign_up_date: new Date().toISOString() },
+        });
+      }
+      posthog?.capture("user_signed_up", { method: "email_password" });
       setShowVerification(false);
       router.replace("/");
       return null;

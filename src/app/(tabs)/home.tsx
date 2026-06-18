@@ -1,5 +1,6 @@
 import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
+import { usePostHog } from "posthog-react-native";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, {
@@ -61,6 +62,7 @@ const STREAK_DAYS = 12;
 export default function HomeScreen() {
   const { user } = useUser();
   const router = useRouter();
+  const posthog = usePostHog();
 
   const code = useLanguageStore((s) => s.selectedLanguage);
   const language = code ? getLanguage(code) : undefined;
@@ -203,7 +205,13 @@ export default function HomeScreen() {
             ) : null}
 
             <Pressable
-              onPress={() => router.push("/learn")}
+              onPress={() => {
+                posthog?.capture("lesson_continued", {
+                  language_code: code,
+                  unit_order: currentUnit?.order,
+                });
+                router.push("/learn");
+              }}
               className="mt-4 self-start rounded-full bg-white px-7 py-3"
             >
               <Text className="font-poppins-bold text-body-md text-lingua-purple">
@@ -227,7 +235,14 @@ export default function HomeScreen() {
           {plan.map((item) => (
             <Pressable
               key={item.key}
-              onPress={() => router.push("/learn")}
+              onPress={() => {
+                posthog?.capture("plan_item_tapped", {
+                  item_key: item.key,
+                  item_title: item.title,
+                  language_code: code,
+                });
+                router.push("/learn");
+              }}
               className="flex-row items-center py-3"
             >
               <View
