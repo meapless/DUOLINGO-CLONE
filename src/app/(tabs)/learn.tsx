@@ -1,11 +1,12 @@
 import { useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 
 import LessonCard, { type LessonStatus } from "@/components/LessonCard";
-import { BookmarkIcon } from "@/components/icons";
+import { BookmarkIcon, ChevronLeftIcon } from "@/components/icons";
 import { images } from "@/constants/images";
 import { getLanguage } from "@/data/languages";
 import { getLessonsByUnit } from "@/data/lessons";
@@ -61,23 +62,39 @@ export default function LearnScreen() {
 
   function handleLessonPress(lesson: Lesson) {
     const status = getLessonStatus(lesson, completedLessons, inProgressLessonId);
-
-    // Mark a fresh lesson as in progress before opening the audio session.
-    if (status === "available") {
-      setInProgress(lesson.id);
-    }
-
     posthog?.capture("lesson_opened", {
       lesson_id: lesson.id,
-      lesson_type: lesson.type,
       language_code: code,
       status,
     });
 
-    router.push({
-      pathname: "/ai-teacher",
-      params: { lessonId: lesson.id },
-    });
+    if (status === "completed") {
+      Alert.alert(lesson.title, "You've completed this lesson! Would you like to review it?", [
+        { text: "Not now", style: "cancel" },
+        { text: "Review", onPress: () => Alert.alert("Coming soon", "Lesson review is coming in the next update!") },
+      ]);
+      return;
+    }
+
+    if (status === "in-progress") {
+      Alert.alert("Continue lesson", `Resume "${lesson.title}"?`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", onPress: () => Alert.alert("Coming soon", "The lesson player is coming in the next update!") },
+      ]);
+      return;
+    }
+
+    // available — set it as in progress
+    Alert.alert("Start lesson", `Start "${lesson.title}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Start",
+        onPress: () => {
+          setInProgress(lesson.id);
+          Alert.alert("Coming soon", "The lesson player is coming in the next update!");
+        },
+      },
+    ]);
   }
 
   if (!code || !currentUnit) {
@@ -96,37 +113,64 @@ export default function LearnScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      {/* ── Top action bar ── */}
-      <View className="flex-row items-center justify-end px-5 pt-2 pb-1">
-        <View className="flex-row items-center">
-          {language ? (
-            <Image
-              source={{ uri: language.flag }}
-              style={styles.flag}
-              resizeMode="cover"
-            />
-          ) : null}
-          <View className="ml-3">
-            <BookmarkIcon size={22} color="#001328" />
-          </View>
+      {/* ── Header: back · title/subtitle · bookmark ── */}
+      <View className="flex-row items-center px-5 pt-1 pb-3">
+        <Pressable onPress={() => router.back()} hitSlop={10} className="pr-2">
+          <ChevronLeftIcon size={26} color="#001328" />
+        </Pressable>
+
+        <View className="flex-1 px-1">
+          <Text className="font-poppins-bold text-h3 text-text-primary" numberOfLines={1}>
+            {currentUnit.title}
+          </Text>
+          <Text className="font-poppins-medium text-body-sm text-text-secondary">
+            Unit {currentUnit.order} · {completedCount} / {unitLessons.length} lessons
+          </Text>
         </View>
+
+        <Pressable hitSlop={10} className="pl-2">
+          <BookmarkIcon size={24} color={inProgressLessonId ? "#6c4ef5" : "#001328"} />
+        </Pressable>
       </View>
 
-      {/* ── Unit illustration ── */}
-      <View style={styles.illustrationWrap}>
+      {/* ── Hero scene: sky gradient + castle behind + mascot in front ── */}
+      <View style={styles.hero}>
+        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+          <Defs>
+            <SvgLinearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#bfe4ff" />
+              <Stop offset="0.7" stopColor="#e6f5ff" />
+              <Stop offset="1" stopColor="#eafbef" />
+            </SvgLinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#sky)" />
+          {/* soft sun */}
+          <Circle cx="18%" cy="26%" r="26" fill="#fff3c4" opacity={0.9} />
+        </Svg>
+
+        {/* ground strip */}
+        <View style={styles.heroGround} />
+
+        {/* castle sits toward the back-right */}
         <Image
-          source={images.mascotWelcome}
-          style={styles.mascot}
+          source={images.palace}
+          style={styles.heroCastle}
           resizeMode="contain"
         />
-      </View>
 
-      {/* ── Unit title + progress ── */}
-      <View className="px-6 pt-4 pb-3">
-        <Text className="heading--h2 text-center">{currentUnit.title}</Text>
-        <Text className="body--sm text-center mt-1">
-          Unit {currentUnit.order} · {completedCount} / {unitLessons.length} lessons
-        </Text>
+        {/* fox mascot waves in the foreground-left */}
+        <Image
+          source={images.mascotWelcome}
+          style={styles.heroMascot}
+          resizeMode="contain"
+        />
+
+        {/* language flag chip, floating top-right */}
+        {language ? (
+          <View style={styles.flagChip}>
+            <Image source={{ uri: language.flag }} style={styles.flag} resizeMode="cover" />
+          </View>
+        ) : null}
       </View>
 
       {/* ── Lessons / Practice tabs ── */}
@@ -186,21 +230,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f6f7fb",
   },
+  hero: {
+    height: 190,
+    marginHorizontal: 20,
+    borderRadius: 24,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  heroGround: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 46,
+    backgroundColor: "#c8efce",
+  },
+  heroCastle: {
+    position: "absolute",
+    bottom: 4,
+    right: 8,
+    width: 150,
+    height: 150,
+  },
+  heroMascot: {
+    position: "absolute",
+    bottom: 0,
+    left: 16,
+    width: 130,
+    height: 150,
+  },
+  flagChip: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.85)",
+  },
   flag: {
     width: 28,
     height: 28,
     borderRadius: 14,
-  },
-  illustrationWrap: {
-    alignItems: "center",
-    backgroundColor: "#dff0ff",
-    marginHorizontal: 20,
-    borderRadius: 20,
-    paddingVertical: 16,
-  },
-  mascot: {
-    width: 140,
-    height: 120,
   },
   emptyMascot: {
     width: 160,
@@ -211,6 +281,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
     marginHorizontal: 24,
+    marginTop: 16,
     marginBottom: 8,
   },
   tabItem: {
