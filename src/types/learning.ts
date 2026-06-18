@@ -140,6 +140,8 @@ export interface Lesson {
   vocabulary: Vocabulary[];
   phrases: Phrase[];
   activities: Activity[];
+  /** Thumbnail image URI shown on the lesson card. */
+  image?: string;
   /** Present on AI teacher lessons (audio Vision Agent). */
   aiTeacherPrompt?: AITeacherPrompt;
 }

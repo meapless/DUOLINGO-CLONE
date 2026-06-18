@@ -311,6 +311,36 @@ export function SparklesIcon({ size = 24, color = "#ffffff" }: IconProps) {
   );
 }
 
+/* ── UI: Bookmark ── */
+export function BookmarkIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/* ── UI: Arrow Left (back) ── */
+export function ArrowLeftIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M19 12H5M5 12l7 7M5 12l7-7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /* ── Home: Video camera (AI video call) ── */
 export function VideoIcon({ size = 24, color = "#ffffff" }: IconProps) {
   return (

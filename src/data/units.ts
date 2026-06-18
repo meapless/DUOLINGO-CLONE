@@ -26,6 +26,22 @@ export const units: Unit[] = [
     level: "beginner",
     lessonIds: ["es-greetings-meet-tutor"],
   },
+  {
+    id: "es-daily",
+    languageCode: "es",
+    order: 3,
+    title: "Daily Life",
+    description: "Navigate everyday situations in Spanish.",
+    level: "beginner",
+    lessonIds: [
+      "es-daily-introductions",
+      "es-daily-life",
+      "es-daily-cafe",
+      "es-daily-travel",
+      "es-daily-shopping",
+      "es-daily-family",
+    ],
+  },
 
   // ─── French ───
   {
@@ -37,6 +53,22 @@ export const units: Unit[] = [
     level: "beginner",
     lessonIds: ["fr-basics-greetings"],
   },
+  {
+    id: "fr-daily",
+    languageCode: "fr",
+    order: 2,
+    title: "Daily Life",
+    description: "Navigate everyday situations in French.",
+    level: "beginner",
+    lessonIds: [
+      "fr-daily-introductions",
+      "fr-daily-life",
+      "fr-daily-cafe",
+      "fr-daily-travel",
+      "fr-daily-shopping",
+      "fr-daily-family",
+    ],
+  },
 
   // ─── German ───
   {
@@ -47,6 +79,22 @@ export const units: Unit[] = [
     description: "Your first German greetings.",
     level: "beginner",
     lessonIds: ["de-basics-greetings"],
+  },
+  {
+    id: "de-daily",
+    languageCode: "de",
+    order: 2,
+    title: "Daily Life",
+    description: "Navigate everyday situations in German.",
+    level: "beginner",
+    lessonIds: [
+      "de-daily-introductions",
+      "de-daily-life",
+      "de-daily-cafe",
+      "de-daily-travel",
+      "de-daily-shopping",
+      "de-daily-family",
+    ],
   },
 ];
 
