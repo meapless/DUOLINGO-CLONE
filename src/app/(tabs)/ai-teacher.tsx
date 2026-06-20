@@ -4,6 +4,7 @@ import {
   StreamVideo,
   useCall,
   useCallStateHooks,
+  type CallClosedCaption,
 } from "@stream-io/video-react-native-sdk";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
@@ -36,6 +37,7 @@ import {
   MicIcon,
   PhoneIcon,
   SpeakerIcon,
+  SubtitlesIcon,
   VideoIcon,
 } from "@/components/icons";
 import { images } from "@/constants/images";
@@ -44,6 +46,9 @@ import { useAudioLessonCall } from "@/hooks/useAudioLessonCall";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { colors } from "@/theme/tokens";
 import type { LanguageCode, Lesson } from "@/types/learning";
+
+/** Stream user ID assigned to the Vision Agent in session+api.ts and agent.py */
+const TEACHER_USER_ID = "lingua-teacher";
 
 type TeacherLine = { text: string; translation?: string };
 
@@ -255,9 +260,16 @@ function CallBoundView({
 }) {
   const call = useCall();
   const posthog = usePostHog();
-  const { useCallCallingState, useMicrophoneState } = useCallStateHooks();
+  const {
+    useCallCallingState,
+    useMicrophoneState,
+    useCallClosedCaptions,
+    useIsCallCaptioningInProgress,
+  } = useCallStateHooks();
   const callingState = useCallCallingState();
   const { status: micStatus, isSpeakingWhileMuted } = useMicrophoneState();
+  const closedCaptions = useCallClosedCaptions();
+  const captioningInProgress = useIsCallCaptioningInProgress();
 
   const status: ConnectionStatus =
     callingState === CallingState.JOINED
@@ -275,6 +287,17 @@ function CallBoundView({
       posthog?.capture("audio_lesson_call_joined", { lesson_id: lesson.id });
     }
   }, [status, posthog, lesson.id]);
+
+  // Start closed captions when the call is joined; stop on leave/unmount.
+  useEffect(() => {
+    if (status !== "connected" || !call) return;
+    call
+      .startClosedCaptions()
+      .catch((e) => console.warn("startClosedCaptions:", e));
+    return () => {
+      call.stopClosedCaptions().catch(() => {});
+    };
+  }, [status, call]);
 
   const enableMic = useCallback(() => {
     call?.microphone.enable().catch((e) => console.error("mic enable", e));
@@ -298,6 +321,8 @@ function CallBoundView({
       onMicPressOut={disableMic}
       onEndCall={onEndCall}
       onRetry={onRetry}
+      closedCaptions={closedCaptions}
+      captioningInProgress={captioningInProgress}
     />
   );
 }
@@ -315,6 +340,8 @@ function AudioLessonView({
   onMicPressOut,
   onEndCall,
   onRetry,
+  closedCaptions = [],
+  captioningInProgress = false,
 }: {
   lesson: Lesson;
   lessonCode: LanguageCode;
@@ -328,6 +355,8 @@ function AudioLessonView({
   onMicPressOut: () => void;
   onEndCall: () => void;
   onRetry: () => void;
+  closedCaptions?: CallClosedCaption[];
+  captioningInProgress?: boolean;
 }) {
   const teacherLines = useMemo(
     () => buildTeacherLines(lesson, lessonCode),
@@ -335,6 +364,7 @@ function AudioLessonView({
   );
 
   const [lineIndex, setLineIndex] = useState(0);
+  const [subtitlesOn, setSubtitlesOn] = useState(true);
 
   const pulse = useSharedValue(0);
   useEffect(() => {
@@ -350,6 +380,10 @@ function AudioLessonView({
   const agentMeta = AGENT_STATUS_META[agentStatus];
   const isConnecting = status === "connecting";
   const line = teacherLines[lineIndex] ?? teacherLines[0];
+
+  // Show live captions only when subtitles are on and captions are available.
+  const showLiveCaptions =
+    subtitlesOn && closedCaptions.length > 0 && status !== "error";
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -451,7 +485,7 @@ function AudioLessonView({
           </View>
         ) : null}
 
-        {/* Error banner or teacher response bubble */}
+        {/* Error banner */}
         {status === "error" ? (
           <View style={styles.bubble}>
             <View className="flex-1">
@@ -466,7 +500,40 @@ function AudioLessonView({
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
+        ) : showLiveCaptions ? (
+          /* Live captions overlay — replaces static bubble while captions are active */
+          <View style={styles.captionOverlay}>
+            {closedCaptions.map((caption) => {
+              const isTeacher = caption.speaker_id === TEACHER_USER_ID;
+              return (
+                <View
+                  key={caption.id}
+                  style={[
+                    styles.captionItem,
+                    isTeacher
+                      ? styles.captionItemTeacher
+                      : styles.captionItemUser,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.captionSpeaker,
+                      {
+                        color: isTeacher
+                          ? colors.lingua.purple
+                          : colors.lingua.green,
+                      },
+                    ]}
+                  >
+                    {isTeacher ? "AI Teacher" : "You"}
+                  </Text>
+                  <Text style={styles.captionText}>{caption.text}</Text>
+                </View>
+              );
+            })}
+          </View>
         ) : (
+          /* Static teacher line — shown when no live captions */
           <View style={styles.bubble}>
             <View className="flex-1">
               <Text className="font-poppins-semibold text-body-lg text-text-primary">
@@ -491,8 +558,15 @@ function AudioLessonView({
         )}
       </View>
 
-      {/* Controls: push-to-speak + end call */}
+      {/* Controls: subtitles toggle + push-to-speak + end call */}
       <View className="flex-row items-end pt-5 pb-1 px-6">
+        <View className="flex-1 items-center">
+          <SubtitlesToggleButton
+            on={subtitlesOn}
+            captioningInProgress={captioningInProgress}
+            onPress={() => setSubtitlesOn((v) => !v)}
+          />
+        </View>
         <View className="flex-1 items-center">
           <PushToSpeakButton
             micEnabled={micEnabled}
@@ -527,6 +601,37 @@ function AudioLessonView({
         ))}
       </View>
     </SafeAreaView>
+  );
+}
+
+function SubtitlesToggleButton({
+  on,
+  captioningInProgress,
+  onPress,
+}: {
+  on: boolean;
+  captioningInProgress: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View className="items-center">
+      <Pressable
+        onPress={onPress}
+        style={[styles.subtitlesBtn, on && styles.subtitlesBtnActive]}
+        hitSlop={8}
+      >
+        {captioningInProgress && on ? (
+          <View style={styles.captioningDot} />
+        ) : null}
+        <SubtitlesIcon
+          size={22}
+          color={on ? colors.lingua.purple : colors.neutral.textSecondary}
+        />
+      </Pressable>
+      <Text className="mt-2 font-poppins-medium text-caption text-text-secondary">
+        {on ? "Captions on" : "Captions off"}
+      </Text>
+    </View>
   );
 }
 
@@ -706,6 +811,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff",
   },
+  // Static teacher line bubble (shown when no live captions are active)
   bubble: {
     position: "absolute",
     left: 16,
@@ -746,6 +852,75 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#ffffff",
   },
+  // Live captions overlay
+  captionOverlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    gap: 6,
+  },
+  captionItem: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderLeftWidth: 3,
+  },
+  captionItemTeacher: {
+    borderLeftColor: colors.lingua.purple,
+  },
+  captionItemUser: {
+    borderLeftColor: colors.lingua.green,
+  },
+  captionSpeaker: {
+    fontFamily: "Poppins-SemiBold",
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  captionText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 14,
+    color: colors.neutral.textPrimary,
+    lineHeight: 20,
+  },
+  // Subtitles toggle button
+  subtitlesBtn: {
+    height: 52,
+    width: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: colors.neutral.border + "60",
+  },
+  subtitlesBtnActive: {
+    backgroundColor: "#f1eeff",
+    borderColor: colors.lingua.purple + "40",
+  },
+  captioningDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.lingua.green,
+  },
+  // Push-to-speak
   pushToSpeakBtn: {
     height: 72,
     width: 72,
