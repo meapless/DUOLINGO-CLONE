@@ -72,9 +72,12 @@ export const lessons: Lesson[] = [
     ],
     activities: [],
     aiTeacherPrompt: {
-      persona: "You are a warm, patient Spanish tutor for absolute beginners. Speak slowly, use simple words, and gently correct mistakes with encouragement.",
-      objective: "Help the learner introduce themselves in Spanish and respond to a basic greeting.",
-      conversationStarters: ["¡Hola! ¿Cómo te llamas?", "Mucho gusto. ¿De dónde eres?"],
+      persona: "You're a friendly, upbeat Spanish teacher who loves celebrating small wins. Use contractions, keep things light, and guide the student through one word at a time.",
+      objective: "Help the student introduce themselves in Spanish — their name and where they're from — through a short, natural back-and-forth conversation. Stay within the lesson's two phrases only.",
+      conversationStarters: [
+        "Let's start with something super useful — 'me llamo' means 'my name is'. Can you say 'me llamo' and then add your name?",
+        "Love it! Now let's try 'soy de' — that means 'I'm from'. Where are you from?",
+      ],
       focusVocabularyIds: ["es-vocab-me-llamo", "es-vocab-soy-de"],
     },
   },
@@ -247,6 +250,15 @@ export const lessons: Lesson[] = [
       { id: "fr-basics-greetings-a1", type: "multipleChoice", prompt: 'How do you say "Thank you" in French?', options: ["Bonjour", "Au revoir", "Merci", "Ça va"], correctIndex: 2 },
       { id: "fr-basics-greetings-a2", type: "translate", prompt: "Hello", answer: "Bonjour" },
     ],
+    aiTeacherPrompt: {
+      persona: "You're a cheerful French teacher who makes total beginners feel welcome. Use contractions, stay encouraging, and celebrate every attempt no matter how small.",
+      objective: "Teach the student their very first French greetings — bonjour, merci, and au revoir — through a friendly spoken conversation. Stick to these three words only.",
+      conversationStarters: [
+        "Let's kick things off with the most important word in French — 'bonjour', which just means 'hello'. Can you say 'bonjour' for me?",
+        "You've got it! Now 'merci' means 'thank you'. Go ahead and give that one a try!",
+      ],
+      focusVocabularyIds: ["fr-vocab-bonjour", "fr-vocab-merci", "fr-vocab-au-revoir"],
+    },
   },
 
   // ──────────────────────── French Daily Life ───────────────────────────
@@ -417,6 +429,15 @@ export const lessons: Lesson[] = [
       { id: "de-basics-greetings-a1", type: "multipleChoice", prompt: 'How do you say "Hello" in German?', options: ["Danke", "Hallo", "Tschüss", "Wie geht's"], correctIndex: 1 },
       { id: "de-basics-greetings-a2", type: "match", pairs: [{ left: "Hallo", right: "Hello" }, { left: "Danke", right: "Thank you" }, { left: "Tschüss", right: "Bye" }] },
     ],
+    aiTeacherPrompt: {
+      persona: "You're an enthusiastic German teacher who keeps lessons short and fun. You warmly encourage every attempt and never make the student feel embarrassed about mistakes.",
+      objective: "Teach the student their first three German greetings — hallo, danke, and tschüss — through a conversational audio exchange. Stay within these three words only.",
+      conversationStarters: [
+        "Let's start with the most important German word — 'hallo', which just means 'hello'. Can you say 'hallo' for me?",
+        "Perfect! Now 'danke' means 'thank you' in German. Let's try that one — go ahead!",
+      ],
+      focusVocabularyIds: ["de-vocab-hallo", "de-vocab-danke", "de-vocab-tschuss"],
+    },
   },
 
   // ──────────────────────── German Daily Life ───────────────────────────
