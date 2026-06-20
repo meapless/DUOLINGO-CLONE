@@ -1,18 +1,21 @@
-import "../global.css";
 import { ClerkProvider, useUser } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
 import { PostHogProvider, usePostHog } from "posthog-react-native";
+import { useEffect } from "react";
+import "../global.css";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+const posthogApiKey = process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
 
 if (!publishableKey) {
-  throw new Error(
-    "Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to your .env file",
-  );
+  throw new Error("Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to your .env file");
+}
+
+if (!posthogApiKey) {
+  throw new Error("Add EXPO_PUBLIC_POSTHOG_API_KEY to your .env file");
 }
 
 SplashScreen.preventAutoHideAsync();
@@ -69,7 +72,7 @@ export default function RootLayout() {
 
   return (
     <PostHogProvider
-      apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY!}
+      apiKey={posthogApiKey}
       options={{
         host: process.env.EXPO_PUBLIC_POSTHOG_HOST,
         captureAppLifecycleEvents: true,
