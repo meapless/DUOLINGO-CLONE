@@ -1,4 +1,3 @@
-import { useUser } from "@clerk/expo";
 import {
   CallingState,
   StreamCall,
@@ -33,12 +32,10 @@ import Svg, {
 
 import {
   BellIcon,
-  CameraIcon,
   ChevronLeftIcon,
   MicIcon,
   PhoneIcon,
   SpeakerIcon,
-  SubtitlesIcon,
   VideoIcon,
 } from "@/components/icons";
 import { images } from "@/constants/images";
@@ -48,10 +45,8 @@ import { useLanguageStore } from "@/store/useLanguageStore";
 import { colors } from "@/theme/tokens";
 import type { LanguageCode, Lesson } from "@/types/learning";
 
-/** A single thing the AI teacher "says" — target text plus its translation. */
 type TeacherLine = { text: string; translation?: string };
 
-/** Friendly opener per language so the session starts like the design bubble. */
 const PRAISE: Record<LanguageCode, TeacherLine> = {
   es: { text: "¡Muy bien! 👏", translation: "That was great!" },
   fr: { text: "Très bien ! 👏", translation: "That was great!" },
@@ -61,14 +56,12 @@ const PRAISE: Record<LanguageCode, TeacherLine> = {
   zh: { text: "很好！👏", translation: "That was great!" },
 };
 
-/** Mocked end-of-turn feedback shown under the controls. */
 const FEEDBACK: { label: string; value: string; color: string }[] = [
   { label: "Speaking", value: "Excellent", color: colors.lingua.green },
   { label: "Pronunciation", value: "Great", color: colors.lingua.green },
   { label: "Grammar", value: "Good", color: colors.lingua.green },
 ];
 
-/** High-level connection status shown in the header. */
 type ConnectionStatus =
   | "connecting"
   | "connected"
@@ -86,18 +79,15 @@ const AGENT_STATUS_META: Record<
   failed: { label: "Teacher unavailable", color: colors.semantic.error },
 };
 
-const STATUS_META: Record<
-  ConnectionStatus,
-  { label: string; color: string }
-> = {
-  connecting: { label: "Connecting…", color: colors.semantic.streak },
-  connected: { label: "Connected", color: colors.semantic.success },
-  reconnecting: { label: "Reconnecting…", color: colors.semantic.streak },
-  ended: { label: "Call ended", color: colors.neutral.textSecondary },
-  error: { label: "Connection failed", color: colors.semantic.error },
-};
+const STATUS_META: Record<ConnectionStatus, { label: string; color: string }> =
+  {
+    connecting: { label: "Connecting…", color: colors.semantic.streak },
+    connected: { label: "Connected", color: colors.semantic.success },
+    reconnecting: { label: "Reconnecting…", color: colors.semantic.streak },
+    ended: { label: "Call ended", color: colors.neutral.textSecondary },
+    error: { label: "Connection failed", color: colors.semantic.error },
+  };
 
-/** Resolve which lesson to teach: the tapped one, else a sensible default. */
 function resolveLesson(
   lessonId: string | undefined,
   code: LanguageCode | null,
@@ -114,21 +104,17 @@ function resolveLesson(
   );
 }
 
-/** Build the teacher's spoken lines from the lesson's content. */
 function buildTeacherLines(lesson: Lesson, code: LanguageCode): TeacherLine[] {
   const lines: TeacherLine[] = [PRAISE[code]];
 
-  // AI teacher context: open with the conversation starters.
   lesson.aiTeacherPrompt?.conversationStarters.forEach((text) =>
     lines.push({ text }),
   );
 
-  // Phrases the learner is practising (target + translation).
   lesson.phrases.forEach((p) =>
     lines.push({ text: p.text, translation: p.translation }),
   );
 
-  // Fall back to vocabulary so non-phrase lessons still have something to say.
   if (lines.length === 1) {
     lesson.vocabulary.forEach((v) =>
       lines.push({ text: v.word, translation: v.translation }),
@@ -142,24 +128,28 @@ export default function AITeacherScreen() {
   const { lessonId } = useLocalSearchParams<{ lessonId?: string }>();
   const router = useRouter();
   const posthog = usePostHog();
-  const { user } = useUser();
 
   const code = useLanguageStore((s) => s.selectedLanguage);
   const lesson = resolveLesson(lessonId, code);
 
-  // lessonCode is derived from the lesson id prefix, falling back to the selected language.
   const lessonCode = (lesson?.id.split("-")[0] as LanguageCode) ?? code;
 
-  // Stream audio call lifecycle + Vision Agent session for this lesson.
-  const { client, call, phase, error, endCall, retry, agentStatus } = useAudioLessonCall({
-    lessonId: lesson?.id,
-    languageCode: lessonCode ?? undefined,
-    lessonTitle: lesson?.title,
-    goals: lesson?.goals,
-    vocabulary: lesson?.vocabulary.map((v) => ({ word: v.word, translation: v.translation })),
-    phrases: lesson?.phrases.map((p) => ({ text: p.text, translation: p.translation })),
-    aiTeacherPrompt: lesson?.aiTeacherPrompt ?? null,
-  });
+  const { client, call, phase, error, endCall, retry, agentStatus } =
+    useAudioLessonCall({
+      lessonId: lesson?.id,
+      languageCode: lessonCode ?? undefined,
+      lessonTitle: lesson?.title,
+      goals: lesson?.goals,
+      vocabulary: lesson?.vocabulary.map((v) => ({
+        word: v.word,
+        translation: v.translation,
+      })),
+      phrases: lesson?.phrases.map((p) => ({
+        text: p.text,
+        translation: p.translation,
+      })),
+      aiTeacherPrompt: lesson?.aiTeacherPrompt ?? null,
+    });
 
   useEffect(() => {
     if (lesson) {
@@ -179,7 +169,7 @@ export default function AITeacherScreen() {
     }
   }, [router]);
 
-  // When the user returns to this tab after ending a call, restart the session.
+  // Restart the session when the user returns to this tab after ending a call.
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   useFocusEffect(
@@ -191,7 +181,9 @@ export default function AITeacherScreen() {
   );
 
   const leaveAndDismiss = useCallback(async () => {
-    posthog?.capture("audio_lesson_call_ended", { lesson_id: lesson?.id ?? "" });
+    posthog?.capture("audio_lesson_call_ended", {
+      lesson_id: lesson?.id ?? "",
+    });
     await endCall();
     dismiss();
   }, [endCall, dismiss, posthog, lesson?.id]);
@@ -214,37 +206,31 @@ export default function AITeacherScreen() {
     );
   }
 
-  // Error / ended before a call is live: render the static layout with the
-  // matching status and a retry affordance — no Stream providers needed.
   if (phase === "error" || !client || !call) {
     return (
       <AudioLessonView
         lesson={lesson}
         lessonCode={lessonCode ?? "es"}
-        userName={user?.fullName}
-        userImage={user?.imageUrl}
         status={phase === "error" ? "error" : "connecting"}
         agentStatus={agentStatus}
         errorMessage={phase === "error" ? error : null}
         micEnabled={false}
         isSpeakingWhileMuted={false}
         canToggleMic={false}
-        onToggleMic={() => {}}
+        onMicPressIn={() => {}}
+        onMicPressOut={() => {}}
         onEndCall={leaveAndDismiss}
         onRetry={retry}
       />
     );
   }
 
-  // Call is live: provide the client + call and let the bound view read state.
   return (
     <StreamVideo client={client}>
       <StreamCall call={call}>
         <CallBoundView
           lesson={lesson}
           lessonCode={lessonCode ?? "es"}
-          userName={user?.fullName}
-          userImage={user?.imageUrl}
           agentStatus={agentStatus}
           onEndCall={leaveAndDismiss}
           onRetry={retry}
@@ -254,20 +240,15 @@ export default function AITeacherScreen() {
   );
 }
 
-/** Reads live call/mic state from the SDK and feeds the presentational view. */
 function CallBoundView({
   lesson,
   lessonCode,
-  userName,
-  userImage,
   agentStatus,
   onEndCall,
   onRetry,
 }: {
   lesson: Lesson;
   lessonCode: LanguageCode;
-  userName: string | null | undefined;
-  userImage: string | null | undefined;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   onEndCall: () => void;
   onRetry: () => void;
@@ -278,7 +259,6 @@ function CallBoundView({
   const callingState = useCallCallingState();
   const { status: micStatus, isSpeakingWhileMuted } = useMicrophoneState();
 
-  // Map the SDK's calling state onto our header status.
   const status: ConnectionStatus =
     callingState === CallingState.JOINED
       ? "connected"
@@ -296,56 +276,56 @@ function CallBoundView({
     }
   }, [status, posthog, lesson.id]);
 
-  const toggleMic = useCallback(() => {
-    call?.microphone.toggle().catch((e) => console.error("mic toggle", e));
+  const enableMic = useCallback(() => {
+    call?.microphone.enable().catch((e) => console.error("mic enable", e));
+  }, [call]);
+
+  const disableMic = useCallback(() => {
+    call?.microphone.disable().catch((e) => console.error("mic disable", e));
   }, [call]);
 
   return (
     <AudioLessonView
       lesson={lesson}
       lessonCode={lessonCode}
-      userName={userName}
-      userImage={userImage}
       status={status}
       agentStatus={agentStatus}
       errorMessage={null}
       micEnabled={micStatus === "enabled"}
       isSpeakingWhileMuted={isSpeakingWhileMuted}
       canToggleMic={status === "connected" || status === "reconnecting"}
-      onToggleMic={toggleMic}
+      onMicPressIn={enableMic}
+      onMicPressOut={disableMic}
       onEndCall={onEndCall}
       onRetry={onRetry}
     />
   );
 }
 
-/** Pure presentational audio-lesson screen. Owns only local UI toggles. */
 function AudioLessonView({
   lesson,
   lessonCode,
-  userName,
-  userImage,
   status,
   agentStatus,
   errorMessage,
   micEnabled,
   isSpeakingWhileMuted,
   canToggleMic,
-  onToggleMic,
+  onMicPressIn,
+  onMicPressOut,
   onEndCall,
   onRetry,
 }: {
   lesson: Lesson;
   lessonCode: LanguageCode;
-  userName: string | null | undefined;
-  userImage: string | null | undefined;
   status: ConnectionStatus;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   errorMessage: string | null;
   micEnabled: boolean;
   isSpeakingWhileMuted: boolean;
   canToggleMic: boolean;
-  onToggleMic: () => void;
+  onMicPressIn: () => void;
+  onMicPressOut: () => void;
   onEndCall: () => void;
   onRetry: () => void;
 }) {
@@ -355,30 +335,26 @@ function AudioLessonView({
   );
 
   const [lineIndex, setLineIndex] = useState(0);
-  const [cameraOn, setCameraOn] = useState(true);
-  const [subtitlesOn, setSubtitlesOn] = useState(true);
 
-  // Gentle breathing pulse behind the teacher so the screen feels alive.
   const pulse = useSharedValue(0);
   useEffect(() => {
     pulse.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
   }, [pulse]);
 
   const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.18 }],
-    opacity: 0.35 - pulse.value * 0.3,
+    transform: [{ scale: 1 + pulse.value * 0.14 }],
+    opacity: 0.35 - pulse.value * 0.25,
   }));
 
   const statusMeta = STATUS_META[status];
   const agentMeta = AGENT_STATUS_META[agentStatus];
   const isConnecting = status === "connecting";
-  const firstName = userName?.split(" ")[0];
   const line = teacherLines[lineIndex] ?? teacherLines[0];
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      {/* ── Header: back · status · video/bell ── */}
-      <View className="flex-row items-center px-5 pt-1 pb-3">
+      {/* Header */}
+      <View className="flex-row items-center px-5 pt-1 pb-2">
         <Pressable onPress={onEndCall} hitSlop={8}>
           <ChevronLeftIcon size={26} color={colors.neutral.textPrimary} />
         </Pressable>
@@ -411,7 +387,8 @@ function AudioLessonView({
         </View>
       </View>
 
-      {/* ── Teacher stage ── */}
+
+      {/* Stage */}
       <View style={styles.stage}>
         <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
           <Defs>
@@ -423,27 +400,7 @@ function AudioLessonView({
           <Rect x="0" y="0" width="100%" height="100%" fill="url(#stageGrad)" />
         </Svg>
 
-        {/* User name badge */}
-        <View style={styles.nameBadge}>
-          {userImage ? (
-            <Image
-              source={{ uri: userImage }}
-              style={styles.nameBadgeImg}
-              resizeMode="cover"
-            />
-          ) : (
-            <Text style={styles.nameBadgeLetter}>
-              {firstName?.[0]?.toUpperCase() ?? "U"}
-            </Text>
-          )}
-          <View style={styles.nameBadgeLabel}>
-            <Text style={styles.nameBadgeLabelText} numberOfLines={1}>
-              {firstName ?? "You"}
-            </Text>
-          </View>
-        </View>
-
-        {/* Teacher avatar */}
+        {/* Teacher avatar — fills stage and truly centers the mascot */}
         <View className="flex-1 items-center justify-center">
           <Animated.View style={[styles.pulseRing, ringStyle]} />
           <View style={styles.avatarWrap}>
@@ -453,6 +410,10 @@ function AudioLessonView({
               resizeMode="contain"
             />
           </View>
+        </View>
+
+        {/* Connection / agent status pill — anchored above the speech bubble */}
+        <View style={styles.pillAnchor}>
           {isConnecting ? (
             <View style={styles.connectingPill}>
               <ActivityIndicator size="small" color={colors.lingua.purple} />
@@ -468,10 +429,15 @@ function AudioLessonView({
                 />
               ) : (
                 <View
-                  style={[styles.agentDot, { backgroundColor: agentMeta.color }]}
+                  style={[
+                    styles.agentDot,
+                    { backgroundColor: agentMeta.color },
+                  ]}
                 />
               )}
-              <Text style={[styles.agentPillText, { color: agentMeta.color }]}>
+              <Text
+                style={[styles.agentPillText, { color: agentMeta.color }]}
+              >
                 {agentMeta.label}
               </Text>
             </View>
@@ -481,11 +447,11 @@ function AudioLessonView({
         {/* Speaking-while-muted hint */}
         {isSpeakingWhileMuted ? (
           <View style={styles.mutedHint}>
-            <Text style={styles.mutedHintText}>You&apos;re muted</Text>
+            <Text style={styles.mutedHintText}>Hold the mic to speak</Text>
           </View>
         ) : null}
 
-        {/* Error banner with retry, or the teacher response bubble */}
+        {/* Error banner or teacher response bubble */}
         {status === "error" ? (
           <View style={styles.bubble}>
             <View className="flex-1">
@@ -506,14 +472,16 @@ function AudioLessonView({
               <Text className="font-poppins-semibold text-body-lg text-text-primary">
                 {line.text}
               </Text>
-              {subtitlesOn && line.translation ? (
+              {line.translation ? (
                 <Text className="mt-0.5 font-poppins text-body-sm text-text-secondary">
                   {line.translation}
                 </Text>
               ) : null}
             </View>
             <Pressable
-              onPress={() => setLineIndex((i) => (i + 1) % teacherLines.length)}
+              onPress={() =>
+                setLineIndex((i) => (i + 1) % teacherLines.length)
+              }
               hitSlop={8}
               style={styles.speakerBtn}
             >
@@ -523,34 +491,29 @@ function AudioLessonView({
         )}
       </View>
 
-      {/* ── Controls ── */}
-      <View className="flex-row justify-around px-6 pt-5">
-        <ControlButton
-          Icon={CameraIcon}
-          label="Camera"
-          onPress={() => setCameraOn((v) => !v)}
-          dim={!cameraOn}
-        />
-        <ControlButton
-          Icon={MicIcon}
-          label={micEnabled ? "Mic" : "Muted"}
-          onPress={onToggleMic}
-          alert={!micEnabled}
-          dim={!canToggleMic}
-        />
-        <ControlButton
-          Icon={SubtitlesIcon}
-          label="Subtitles"
-          onPress={() => setSubtitlesOn((v) => !v)}
-          dim={!subtitlesOn}
-        />
-        <ControlButton Icon={PhoneIcon} label="End Call" onPress={onEndCall} end />
+      {/* Controls: push-to-speak + end call */}
+      <View className="flex-row items-end pt-5 pb-1 px-6">
+        <View className="flex-1 items-center">
+          <PushToSpeakButton
+            micEnabled={micEnabled}
+            canSpeak={canToggleMic}
+            onPressIn={onMicPressIn}
+            onPressOut={onMicPressOut}
+          />
+        </View>
+        <View className="flex-1 items-center">
+          <EndCallButton onPress={onEndCall} />
+        </View>
       </View>
 
-      {/* ── Feedback ── */}
-      <View className="flex-row px-5 pt-5 pb-3" style={styles.feedbackRow}>
+      {/* Feedback */}
+      <View className="flex-row px-5 pt-4 pb-3" style={styles.feedbackRow}>
         {FEEDBACK.map((item) => (
-          <View key={item.label} style={styles.feedbackCard} className="flex-1">
+          <View
+            key={item.label}
+            style={styles.feedbackCard}
+            className="flex-1"
+          >
             <Text className="font-poppins-medium text-caption text-text-secondary">
               {item.label}
             </Text>
@@ -567,44 +530,67 @@ function AudioLessonView({
   );
 }
 
-/** One round control button with a label underneath. */
-function ControlButton({
-  Icon,
-  label,
-  onPress,
-  end,
-  alert,
-  dim,
+/** Large hold-to-speak button. Enables mic while held, disables on release. */
+function PushToSpeakButton({
+  micEnabled,
+  canSpeak,
+  onPressIn,
+  onPressOut,
 }: {
-  Icon: (props: { size?: number; color?: string }) => React.ReactNode;
-  label: string;
-  onPress: () => void;
-  end?: boolean;
-  alert?: boolean;
-  dim?: boolean;
+  micEnabled: boolean;
+  canSpeak: boolean;
+  onPressIn: () => void;
+  onPressOut: () => void;
 }) {
-  const iconColor = end
-    ? "#ffffff"
-    : alert
-      ? colors.semantic.error
-      : dim
-        ? "#9aa0ab"
-        : colors.neutral.textPrimary;
+  const scale = useSharedValue(1);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = useCallback(() => {
+    scale.value = withTiming(0.9, { duration: 100 });
+    onPressIn();
+  }, [onPressIn, scale]);
+
+  const handlePressOut = useCallback(() => {
+    scale.value = withTiming(1, { duration: 150 });
+    onPressOut();
+  }, [onPressOut, scale]);
 
   return (
     <View className="items-center">
-      <Pressable
-        onPress={onPress}
-        style={[
-          styles.control,
-          end && styles.controlEnd,
-          alert && styles.controlAlert,
-        ]}
-      >
-        <Icon size={24} color={iconColor} />
+      <Animated.View style={animStyle}>
+        <Pressable
+          onPressIn={canSpeak ? handlePressIn : undefined}
+          onPressOut={canSpeak ? handlePressOut : undefined}
+          style={[
+            styles.pushToSpeakBtn,
+            micEnabled && styles.pushToSpeakActive,
+            !canSpeak && styles.pushToSpeakDisabled,
+          ]}
+        >
+          <MicIcon
+            size={28}
+            color={micEnabled ? "#ffffff" : colors.neutral.textPrimary}
+          />
+        </Pressable>
+      </Animated.View>
+      <Text className="mt-2 font-poppins-medium text-caption text-text-secondary">
+        {micEnabled ? "Speaking…" : "Hold to speak"}
+      </Text>
+    </View>
+  );
+}
+
+function EndCallButton({ onPress }: { onPress: () => void }) {
+  return (
+    <View className="items-center">
+      <Pressable onPress={onPress} style={styles.endCallBtn}>
+        <PhoneIcon size={24} color="#ffffff" />
       </Pressable>
       <Text className="mt-2 font-poppins-medium text-caption text-text-secondary">
-        {label}
+        End Call
       </Text>
     </View>
   );
@@ -647,65 +633,35 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: "hidden",
   },
-  nameBadge: {
+  pillAnchor: {
     position: "absolute",
-    top: 16,
-    right: 16,
-    width: 76,
-    height: 100,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#1a6b5c",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  nameBadgeLetter: {
-    fontFamily: "Poppins-Bold",
-    fontSize: 38,
-    color: "#ffffff",
-  },
-  nameBadgeImg: {
-    width: "100%",
-    height: "100%",
-  },
-  nameBadgeLabel: {
-    position: "absolute",
+    bottom: 108,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    paddingHorizontal: 6,
-    paddingVertical: 5,
     alignItems: "center",
-  },
-  nameBadgeLabelText: {
-    fontFamily: "Poppins-SemiBold",
-    fontSize: 11,
-    color: "#ffffff",
   },
   pulseRing: {
     position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
     backgroundColor: colors.lingua.purple,
   },
   avatarWrap: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 230,
+    height: 230,
+    borderRadius: 115,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.55)",
   },
   avatar: {
-    width: 150,
-    height: 150,
+    width: 200,
+    height: 200,
   },
   connectingPill: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
     backgroundColor: "rgba(255,255,255,0.9)",
     borderRadius: 999,
     paddingHorizontal: 14,
@@ -720,7 +676,6 @@ const styles = StyleSheet.create({
   agentPill: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
     backgroundColor: "rgba(255,255,255,0.9)",
     borderRadius: 999,
     paddingHorizontal: 14,
@@ -791,26 +746,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#ffffff",
   },
-  control: {
-    height: 58,
-    width: 58,
-    borderRadius: 29,
+  pushToSpeakBtn: {
+    height: 72,
+    width: 72,
+    borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: colors.lingua.purple + "40",
   },
-  controlEnd: {
+  pushToSpeakActive: {
+    backgroundColor: colors.lingua.purple,
+    borderColor: colors.lingua.purple,
+    shadowColor: colors.lingua.purple,
+    shadowOpacity: 0.4,
+    elevation: 8,
+  },
+  pushToSpeakDisabled: {
+    opacity: 0.45,
+  },
+  endCallBtn: {
+    height: 58,
+    width: 58,
+    borderRadius: 29,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.semantic.error,
     shadowColor: colors.semantic.error,
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
-  },
-  controlAlert: {
-    backgroundColor: "#ffe9e9",
+    shadowRadius: 8,
+    elevation: 4,
   },
   feedbackRow: {
     gap: 12,

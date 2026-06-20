@@ -161,9 +161,11 @@ export function useAudioLessonCall({
         activeCall.setDisconnectionTimeout(120);
         setCall(activeCall);
 
+        // Push-to-speak: disable camera and mic BEFORE joining so the SFU
+        // never sees an audio track until the user holds the button.
         await activeCall.camera.disable().catch(() => {});
+        await activeCall.microphone.disable().catch(() => {});
         await activeCall.join({ create: false });
-        await activeCall.microphone.enable().catch(() => {});
         if (cancelled) return;
 
         setPhase("ready");
