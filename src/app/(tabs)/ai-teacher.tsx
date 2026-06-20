@@ -1,8 +1,22 @@
 import { useUser } from "@clerk/expo";
+import {
+  CallingState,
+  StreamCall,
+  StreamVideo,
+  useCall,
+  useCallStateHooks,
+} from "@stream-io/video-react-native-sdk";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
-import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   useAnimatedStyle,
@@ -31,9 +45,10 @@ import {
 import { images } from "@/constants/images";
 import { getLanguage } from "@/data/languages";
 import { getLesson, getLessonsByLanguage } from "@/data/lessons";
+import { useAudioLessonCall } from "@/hooks/useAudioLessonCall";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { colors } from "@/theme/tokens";
-import type { LanguageCode, Lesson } from "@/types/learning";
+import type { Language, LanguageCode, Lesson } from "@/types/learning";
 
 /** A single thing the AI teacher "says" — target text plus its translation. */
 type TeacherLine = { text: string; translation?: string };
@@ -54,6 +69,25 @@ const FEEDBACK: { label: string; value: string; color: string }[] = [
   { label: "Pronunciation", value: "Great", color: colors.lingua.green },
   { label: "Grammar", value: "Good", color: colors.lingua.green },
 ];
+
+/** High-level connection status shown in the header. */
+type ConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "ended"
+  | "error";
+
+const STATUS_META: Record<
+  ConnectionStatus,
+  { label: string; color: string }
+> = {
+  connecting: { label: "Connecting…", color: colors.semantic.streak },
+  connected: { label: "Connected", color: colors.semantic.success },
+  reconnecting: { label: "Reconnecting…", color: colors.semantic.streak },
+  ended: { label: "Call ended", color: colors.neutral.textSecondary },
+  error: { label: "Connection failed", color: colors.semantic.error },
+};
 
 /** Resolve which lesson to teach: the tapped one, else a sensible default. */
 function resolveLesson(
@@ -110,26 +144,12 @@ export default function AITeacherScreen() {
   const lessonCode = (lesson?.id.split("-")[0] as LanguageCode) ?? code;
   const language = lessonCode ? getLanguage(lessonCode) : undefined;
 
-  const teacherLines = useMemo(
-    () => (lesson ? buildTeacherLines(lesson, lessonCode ?? "es") : []),
-    [lesson, lessonCode],
-  );
-
-  const [lineIndex, setLineIndex] = useState(0);
-  const [micOn, setMicOn] = useState(true);
-  const [cameraOn, setCameraOn] = useState(true);
-  const [subtitlesOn, setSubtitlesOn] = useState(true);
-
-  // Gentle breathing pulse behind the teacher so the screen feels alive.
-  const pulse = useSharedValue(0);
-  useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
-  }, [pulse]);
-
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.18 }],
-    opacity: 0.35 - pulse.value * 0.3,
-  }));
+  // Stream audio call lifecycle for this lesson (token → client → join).
+  const { client, call, phase, error, endCall, retry } = useAudioLessonCall({
+    lessonId: lesson?.id,
+    languageCode: lessonCode ?? undefined,
+    lessonTitle: lesson?.title,
+  });
 
   useEffect(() => {
     if (lesson) {
@@ -141,13 +161,19 @@ export default function AITeacherScreen() {
     }
   }, [lesson, lessonCode, posthog]);
 
-  function dismiss() {
+  const dismiss = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace("/learn");
     }
-  }
+  }, [router]);
+
+  const leaveAndDismiss = useCallback(async () => {
+    posthog?.capture("audio_lesson_call_ended", { lesson_id: lesson?.id ?? "" });
+    await endCall();
+    dismiss();
+  }, [endCall, dismiss, posthog, lesson?.id]);
 
   if (!lesson) {
     return (
@@ -167,6 +193,164 @@ export default function AITeacherScreen() {
     );
   }
 
+  // Error / ended before a call is live: render the static layout with the
+  // matching status and a retry affordance — no Stream providers needed.
+  if (phase === "error" || !client || !call) {
+    return (
+      <AudioLessonView
+        lesson={lesson}
+        language={language}
+        lessonCode={lessonCode ?? "es"}
+        userName={user?.fullName}
+        userImage={user?.imageUrl}
+        status={phase === "error" ? "error" : "connecting"}
+        errorMessage={phase === "error" ? error : null}
+        micEnabled={false}
+        isSpeakingWhileMuted={false}
+        canToggleMic={false}
+        onToggleMic={() => {}}
+        onEndCall={leaveAndDismiss}
+        onRetry={retry}
+      />
+    );
+  }
+
+  // Call is live: provide the client + call and let the bound view read state.
+  return (
+    <StreamVideo client={client}>
+      <StreamCall call={call}>
+        <CallBoundView
+          lesson={lesson}
+          language={language}
+          lessonCode={lessonCode ?? "es"}
+          userName={user?.fullName}
+          userImage={user?.imageUrl}
+          onEndCall={leaveAndDismiss}
+          onRetry={retry}
+        />
+      </StreamCall>
+    </StreamVideo>
+  );
+}
+
+/** Reads live call/mic state from the SDK and feeds the presentational view. */
+function CallBoundView({
+  lesson,
+  language,
+  lessonCode,
+  userName,
+  userImage,
+  onEndCall,
+  onRetry,
+}: {
+  lesson: Lesson;
+  language: Language | undefined;
+  lessonCode: LanguageCode;
+  userName: string | null | undefined;
+  userImage: string | null | undefined;
+  onEndCall: () => void;
+  onRetry: () => void;
+}) {
+  const call = useCall();
+  const posthog = usePostHog();
+  const { useCallCallingState, useMicrophoneState } = useCallStateHooks();
+  const callingState = useCallCallingState();
+  const { status: micStatus, isSpeakingWhileMuted } = useMicrophoneState();
+
+  // Map the SDK's calling state onto our header status.
+  const status: ConnectionStatus =
+    callingState === CallingState.JOINED
+      ? "connected"
+      : callingState === CallingState.RECONNECTING ||
+          callingState === CallingState.RECONNECTING_FAILED ||
+          callingState === CallingState.OFFLINE
+        ? "reconnecting"
+        : callingState === CallingState.LEFT
+          ? "ended"
+          : "connecting";
+
+  useEffect(() => {
+    if (status === "connected") {
+      posthog?.capture("audio_lesson_call_joined", { lesson_id: lesson.id });
+    }
+  }, [status, posthog, lesson.id]);
+
+  const toggleMic = useCallback(() => {
+    call?.microphone.toggle().catch((e) => console.error("mic toggle", e));
+  }, [call]);
+
+  return (
+    <AudioLessonView
+      lesson={lesson}
+      language={language}
+      lessonCode={lessonCode}
+      userName={userName}
+      userImage={userImage}
+      status={status}
+      errorMessage={null}
+      micEnabled={micStatus === "enabled"}
+      isSpeakingWhileMuted={isSpeakingWhileMuted}
+      canToggleMic={status === "connected" || status === "reconnecting"}
+      onToggleMic={toggleMic}
+      onEndCall={onEndCall}
+      onRetry={onRetry}
+    />
+  );
+}
+
+/** Pure presentational audio-lesson screen. Owns only local UI toggles. */
+function AudioLessonView({
+  lesson,
+  language,
+  lessonCode,
+  userName,
+  userImage,
+  status,
+  errorMessage,
+  micEnabled,
+  isSpeakingWhileMuted,
+  canToggleMic,
+  onToggleMic,
+  onEndCall,
+  onRetry,
+}: {
+  lesson: Lesson;
+  language: Language | undefined;
+  lessonCode: LanguageCode;
+  userName: string | null | undefined;
+  userImage: string | null | undefined;
+  status: ConnectionStatus;
+  errorMessage: string | null;
+  micEnabled: boolean;
+  isSpeakingWhileMuted: boolean;
+  canToggleMic: boolean;
+  onToggleMic: () => void;
+  onEndCall: () => void;
+  onRetry: () => void;
+}) {
+  const teacherLines = useMemo(
+    () => buildTeacherLines(lesson, lessonCode),
+    [lesson, lessonCode],
+  );
+
+  const [lineIndex, setLineIndex] = useState(0);
+  const [cameraOn, setCameraOn] = useState(true); // local preview only (audio-only call)
+  const [subtitlesOn, setSubtitlesOn] = useState(true);
+
+  // Gentle breathing pulse behind the teacher so the screen feels alive.
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
+  }, [pulse]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + pulse.value * 0.18 }],
+    opacity: 0.35 - pulse.value * 0.3,
+  }));
+
+  const statusMeta = STATUS_META[status];
+  const isConnecting = status === "connecting";
+  const firstName = userName?.split(" ")[0];
   const line = teacherLines[lineIndex] ?? teacherLines[0];
   const goal = lesson.goals[0];
 
@@ -174,7 +358,7 @@ export default function AITeacherScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       {/* ── Header: back · status · video/bell ── */}
       <View className="flex-row items-center px-5 pt-1 pb-3">
-        <Pressable onPress={dismiss} hitSlop={8}>
+        <Pressable onPress={onEndCall} hitSlop={8}>
           <ChevronLeftIcon size={26} color={colors.neutral.textPrimary} />
         </Pressable>
 
@@ -183,9 +367,14 @@ export default function AITeacherScreen() {
             AI Teacher
           </Text>
           <View className="mt-0.5 flex-row items-center">
-            <View className="h-2 w-2 rounded-full bg-success" />
-            <Text className="ml-1.5 font-poppins-medium text-caption text-success">
-              Online
+            <View
+              style={[styles.statusDot, { backgroundColor: statusMeta.color }]}
+            />
+            <Text
+              className="ml-1.5 font-poppins-medium text-caption"
+              style={{ color: statusMeta.color }}
+            >
+              {statusMeta.label}
             </Text>
           </View>
         </View>
@@ -243,12 +432,12 @@ export default function AITeacherScreen() {
           ) : null}
         </View>
 
-        {/* Learner camera preview (visual placeholder only) */}
+        {/* Learner camera preview + name (visual placeholder only) */}
         {cameraOn ? (
           <View style={styles.preview}>
-            {user?.imageUrl ? (
+            {userImage ? (
               <Image
-                source={{ uri: user.imageUrl }}
+                source={{ uri: userImage }}
                 style={styles.previewImg}
                 resizeMode="cover"
               />
@@ -257,6 +446,12 @@ export default function AITeacherScreen() {
                 <ProfileIcon size={28} color="#ffffff" />
               </View>
             )}
+            <View style={styles.previewLabel}>
+              <Text style={styles.previewLabelText} numberOfLines={1}>
+                {firstName ?? "You"}
+                {!micEnabled ? "  🔇" : ""}
+              </Text>
+            </View>
           </View>
         ) : null}
 
@@ -270,30 +465,57 @@ export default function AITeacherScreen() {
               resizeMode="contain"
             />
           </View>
+          {isConnecting ? (
+            <View style={styles.connectingPill}>
+              <ActivityIndicator size="small" color={colors.lingua.purple} />
+              <Text style={styles.connectingText}>Connecting your audio…</Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Teacher response bubble */}
-        <View style={styles.bubble}>
-          <View className="flex-1">
-            <Text className="font-poppins-semibold text-body-lg text-text-primary">
-              {line.text}
-            </Text>
-            {subtitlesOn && line.translation ? (
-              <Text className="mt-0.5 font-poppins text-body-sm text-text-secondary">
-                {line.translation}
-              </Text>
-            ) : null}
+        {/* Speaking-while-muted hint */}
+        {isSpeakingWhileMuted ? (
+          <View style={styles.mutedHint}>
+            <Text style={styles.mutedHintText}>You&apos;re muted</Text>
           </View>
-          <Pressable
-            onPress={() =>
-              setLineIndex((i) => (i + 1) % teacherLines.length)
-            }
-            hitSlop={8}
-            style={styles.speakerBtn}
-          >
-            <SpeakerIcon size={20} color={colors.lingua.purple} />
-          </Pressable>
-        </View>
+        ) : null}
+
+        {/* Error banner with retry, or the teacher response bubble */}
+        {status === "error" ? (
+          <View style={styles.bubble}>
+            <View className="flex-1">
+              <Text className="font-poppins-semibold text-body-md text-text-primary">
+                Couldn&apos;t connect
+              </Text>
+              <Text className="mt-0.5 font-poppins text-body-sm text-text-secondary">
+                {errorMessage ?? "Please check your connection and try again."}
+              </Text>
+            </View>
+            <Pressable onPress={onRetry} hitSlop={8} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.bubble}>
+            <View className="flex-1">
+              <Text className="font-poppins-semibold text-body-lg text-text-primary">
+                {line.text}
+              </Text>
+              {subtitlesOn && line.translation ? (
+                <Text className="mt-0.5 font-poppins text-body-sm text-text-secondary">
+                  {line.translation}
+                </Text>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => setLineIndex((i) => (i + 1) % teacherLines.length)}
+              hitSlop={8}
+              style={styles.speakerBtn}
+            >
+              <SpeakerIcon size={20} color={colors.lingua.purple} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {/* ── Controls ── */}
@@ -306,9 +528,10 @@ export default function AITeacherScreen() {
         />
         <ControlButton
           Icon={MicIcon}
-          label={micOn ? "Mic" : "Muted"}
-          onPress={() => setMicOn((v) => !v)}
-          alert={!micOn}
+          label={micEnabled ? "Mic" : "Muted"}
+          onPress={onToggleMic}
+          alert={!micEnabled}
+          dim={!canToggleMic}
         />
         <ControlButton
           Icon={SubtitlesIcon}
@@ -316,12 +539,7 @@ export default function AITeacherScreen() {
           onPress={() => setSubtitlesOn((v) => !v)}
           dim={!subtitlesOn}
         />
-        <ControlButton
-          Icon={PhoneIcon}
-          label="End Call"
-          onPress={dismiss}
-          end
-        />
+        <ControlButton Icon={PhoneIcon} label="End Call" onPress={onEndCall} end />
       </View>
 
       {/* ── Feedback ── */}
@@ -396,6 +614,11 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
   },
+  statusDot: {
+    height: 8,
+    width: 8,
+    borderRadius: 4,
+  },
   videoBadge: {
     position: "absolute",
     top: -8,
@@ -456,6 +679,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.lingua.blue,
   },
+  previewLabel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  previewLabelText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 10,
+    color: "#ffffff",
+  },
   pulseRing: {
     position: "absolute",
     width: 200,
@@ -474,6 +711,35 @@ const styles = StyleSheet.create({
   avatar: {
     width: 150,
     height: 150,
+  },
+  connectingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  connectingText: {
+    marginLeft: 8,
+    fontFamily: "Poppins-Medium",
+    fontSize: 12,
+    color: colors.neutral.textPrimary,
+  },
+  mutedHint: {
+    position: "absolute",
+    top: 16,
+    alignSelf: "center",
+    backgroundColor: colors.semantic.error,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  mutedHintText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 11,
+    color: "#ffffff",
   },
   bubble: {
     position: "absolute",
@@ -500,6 +766,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f1eeff",
+  },
+  retryBtn: {
+    marginLeft: 12,
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.lingua.purple,
+  },
+  retryText: {
+    fontFamily: "Poppins-SemiBold",
+    fontSize: 13,
+    color: "#ffffff",
   },
   control: {
     height: 58,
