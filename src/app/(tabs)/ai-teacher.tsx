@@ -6,9 +6,9 @@ import {
   useCall,
   useCallStateHooks,
 } from "@stream-io/video-react-native-sdk";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -37,18 +37,16 @@ import {
   ChevronLeftIcon,
   MicIcon,
   PhoneIcon,
-  ProfileIcon,
   SpeakerIcon,
   SubtitlesIcon,
   VideoIcon,
 } from "@/components/icons";
 import { images } from "@/constants/images";
-import { getLanguage } from "@/data/languages";
 import { getLesson, getLessonsByLanguage } from "@/data/lessons";
 import { useAudioLessonCall } from "@/hooks/useAudioLessonCall";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { colors } from "@/theme/tokens";
-import type { Language, LanguageCode, Lesson } from "@/types/learning";
+import type { LanguageCode, Lesson } from "@/types/learning";
 
 /** A single thing the AI teacher "says" — target text plus its translation. */
 type TeacherLine = { text: string; translation?: string };
@@ -139,10 +137,8 @@ export default function AITeacherScreen() {
   const code = useLanguageStore((s) => s.selectedLanguage);
   const lesson = resolveLesson(lessonId, code);
 
-  // Language to show is derived from the lesson itself (its id is prefixed
-  // with the language code), falling back to the selected language.
+  // lessonCode is derived from the lesson id prefix, falling back to the selected language.
   const lessonCode = (lesson?.id.split("-")[0] as LanguageCode) ?? code;
-  const language = lessonCode ? getLanguage(lessonCode) : undefined;
 
   // Stream audio call lifecycle for this lesson (token → client → join).
   const { client, call, phase, error, endCall, retry } = useAudioLessonCall({
@@ -168,6 +164,17 @@ export default function AITeacherScreen() {
       router.replace("/learn");
     }
   }, [router]);
+
+  // When the user returns to this tab after ending a call, restart the session.
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  useFocusEffect(
+    useCallback(() => {
+      if (phaseRef.current === "ended") {
+        retry();
+      }
+    }, [retry]),
+  );
 
   const leaveAndDismiss = useCallback(async () => {
     posthog?.capture("audio_lesson_call_ended", { lesson_id: lesson?.id ?? "" });
@@ -199,7 +206,6 @@ export default function AITeacherScreen() {
     return (
       <AudioLessonView
         lesson={lesson}
-        language={language}
         lessonCode={lessonCode ?? "es"}
         userName={user?.fullName}
         userImage={user?.imageUrl}
@@ -221,7 +227,6 @@ export default function AITeacherScreen() {
       <StreamCall call={call}>
         <CallBoundView
           lesson={lesson}
-          language={language}
           lessonCode={lessonCode ?? "es"}
           userName={user?.fullName}
           userImage={user?.imageUrl}
@@ -236,7 +241,6 @@ export default function AITeacherScreen() {
 /** Reads live call/mic state from the SDK and feeds the presentational view. */
 function CallBoundView({
   lesson,
-  language,
   lessonCode,
   userName,
   userImage,
@@ -244,7 +248,6 @@ function CallBoundView({
   onRetry,
 }: {
   lesson: Lesson;
-  language: Language | undefined;
   lessonCode: LanguageCode;
   userName: string | null | undefined;
   userImage: string | null | undefined;
@@ -282,7 +285,6 @@ function CallBoundView({
   return (
     <AudioLessonView
       lesson={lesson}
-      language={language}
       lessonCode={lessonCode}
       userName={userName}
       userImage={userImage}
@@ -301,7 +303,6 @@ function CallBoundView({
 /** Pure presentational audio-lesson screen. Owns only local UI toggles. */
 function AudioLessonView({
   lesson,
-  language,
   lessonCode,
   userName,
   userImage,
@@ -315,7 +316,6 @@ function AudioLessonView({
   onRetry,
 }: {
   lesson: Lesson;
-  language: Language | undefined;
   lessonCode: LanguageCode;
   userName: string | null | undefined;
   userImage: string | null | undefined;
@@ -334,7 +334,7 @@ function AudioLessonView({
   );
 
   const [lineIndex, setLineIndex] = useState(0);
-  const [cameraOn, setCameraOn] = useState(true); // local preview only (audio-only call)
+  const [cameraOn, setCameraOn] = useState(true);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
 
   // Gentle breathing pulse behind the teacher so the screen feels alive.
@@ -352,7 +352,6 @@ function AudioLessonView({
   const isConnecting = status === "connecting";
   const firstName = userName?.split(" ")[0];
   const line = teacherLines[lineIndex] ?? teacherLines[0];
-  const goal = lesson.goals[0];
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -402,58 +401,25 @@ function AudioLessonView({
           <Rect x="0" y="0" width="100%" height="100%" fill="url(#stageGrad)" />
         </Svg>
 
-        {/* Lesson context: language · title · goal */}
-        <View style={styles.overlayCard}>
-          <View className="flex-row items-center">
-            {language ? (
-              <Image
-                source={{ uri: language.flag }}
-                style={styles.overlayFlag}
-                resizeMode="cover"
-              />
-            ) : null}
-            <Text className="ml-1.5 font-poppins-medium text-caption text-text-secondary">
-              {language?.name ?? "Lesson"}
+        {/* User name badge */}
+        <View style={styles.nameBadge}>
+          {userImage ? (
+            <Image
+              source={{ uri: userImage }}
+              style={styles.nameBadgeImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.nameBadgeLetter}>
+              {firstName?.[0]?.toUpperCase() ?? "U"}
+            </Text>
+          )}
+          <View style={styles.nameBadgeLabel}>
+            <Text style={styles.nameBadgeLabelText} numberOfLines={1}>
+              {firstName ?? "You"}
             </Text>
           </View>
-          <Text
-            className="mt-0.5 font-poppins-semibold text-body-md text-text-primary"
-            numberOfLines={1}
-          >
-            {lesson.title}
-          </Text>
-          {goal ? (
-            <Text
-              className="mt-0.5 font-poppins text-caption text-text-secondary"
-              numberOfLines={1}
-            >
-              🎯 {goal}
-            </Text>
-          ) : null}
         </View>
-
-        {/* Learner camera preview + name (visual placeholder only) */}
-        {cameraOn ? (
-          <View style={styles.preview}>
-            {userImage ? (
-              <Image
-                source={{ uri: userImage }}
-                style={styles.previewImg}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.previewPlaceholder}>
-                <ProfileIcon size={28} color="#ffffff" />
-              </View>
-            )}
-            <View style={styles.previewLabel}>
-              <Text style={styles.previewLabelText} numberOfLines={1}>
-                {firstName ?? "You"}
-                {!micEnabled ? "  🔇" : ""}
-              </Text>
-            </View>
-          </View>
-        ) : null}
 
         {/* Teacher avatar */}
         <View className="flex-1 items-center justify-center">
@@ -642,55 +608,40 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: "hidden",
   },
-  overlayCard: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    maxWidth: "62%",
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  overlayFlag: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-  },
-  preview: {
+  nameBadge: {
     position: "absolute",
     top: 16,
     right: 16,
-    width: 72,
-    height: 96,
+    width: 76,
+    height: 100,
     borderRadius: 16,
     overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "#ffffff",
-    backgroundColor: "#cdd5e0",
+    backgroundColor: "#1a6b5c",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  previewImg: {
+  nameBadgeLetter: {
+    fontFamily: "Poppins-Bold",
+    fontSize: 38,
+    color: "#ffffff",
+  },
+  nameBadgeImg: {
     width: "100%",
     height: "100%",
   },
-  previewPlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.lingua.blue,
-  },
-  previewLabel: {
+  nameBadgeLabel: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.35)",
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 5,
+    alignItems: "center",
   },
-  previewLabelText: {
-    fontFamily: "Poppins-Medium",
-    fontSize: 10,
+  nameBadgeLabelText: {
+    fontFamily: "Poppins-SemiBold",
+    fontSize: 11,
     color: "#ffffff",
   },
   pulseRing: {
