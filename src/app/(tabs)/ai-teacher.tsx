@@ -76,6 +76,16 @@ type ConnectionStatus =
   | "ended"
   | "error";
 
+const AGENT_STATUS_META: Record<
+  import("@/hooks/useAudioLessonCall").AgentStatus,
+  { label: string; color: string }
+> = {
+  idle: { label: "Waiting for teacher…", color: colors.neutral.textSecondary },
+  connecting: { label: "Teacher joining…", color: colors.semantic.streak },
+  connected: { label: "Teacher connected", color: colors.semantic.success },
+  failed: { label: "Teacher unavailable", color: colors.semantic.error },
+};
+
 const STATUS_META: Record<
   ConnectionStatus,
   { label: string; color: string }
@@ -140,11 +150,15 @@ export default function AITeacherScreen() {
   // lessonCode is derived from the lesson id prefix, falling back to the selected language.
   const lessonCode = (lesson?.id.split("-")[0] as LanguageCode) ?? code;
 
-  // Stream audio call lifecycle for this lesson (token → client → join).
-  const { client, call, phase, error, endCall, retry } = useAudioLessonCall({
+  // Stream audio call lifecycle + Vision Agent session for this lesson.
+  const { client, call, phase, error, endCall, retry, agentStatus } = useAudioLessonCall({
     lessonId: lesson?.id,
     languageCode: lessonCode ?? undefined,
     lessonTitle: lesson?.title,
+    goals: lesson?.goals,
+    vocabulary: lesson?.vocabulary.map((v) => ({ word: v.word, translation: v.translation })),
+    phrases: lesson?.phrases.map((p) => ({ text: p.text, translation: p.translation })),
+    aiTeacherPrompt: lesson?.aiTeacherPrompt ?? null,
   });
 
   useEffect(() => {
@@ -210,6 +224,7 @@ export default function AITeacherScreen() {
         userName={user?.fullName}
         userImage={user?.imageUrl}
         status={phase === "error" ? "error" : "connecting"}
+        agentStatus={agentStatus}
         errorMessage={phase === "error" ? error : null}
         micEnabled={false}
         isSpeakingWhileMuted={false}
@@ -230,6 +245,7 @@ export default function AITeacherScreen() {
           lessonCode={lessonCode ?? "es"}
           userName={user?.fullName}
           userImage={user?.imageUrl}
+          agentStatus={agentStatus}
           onEndCall={leaveAndDismiss}
           onRetry={retry}
         />
@@ -244,6 +260,7 @@ function CallBoundView({
   lessonCode,
   userName,
   userImage,
+  agentStatus,
   onEndCall,
   onRetry,
 }: {
@@ -251,6 +268,7 @@ function CallBoundView({
   lessonCode: LanguageCode;
   userName: string | null | undefined;
   userImage: string | null | undefined;
+  agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   onEndCall: () => void;
   onRetry: () => void;
 }) {
@@ -289,6 +307,7 @@ function CallBoundView({
       userName={userName}
       userImage={userImage}
       status={status}
+      agentStatus={agentStatus}
       errorMessage={null}
       micEnabled={micStatus === "enabled"}
       isSpeakingWhileMuted={isSpeakingWhileMuted}
@@ -307,6 +326,7 @@ function AudioLessonView({
   userName,
   userImage,
   status,
+  agentStatus,
   errorMessage,
   micEnabled,
   isSpeakingWhileMuted,
@@ -320,6 +340,7 @@ function AudioLessonView({
   userName: string | null | undefined;
   userImage: string | null | undefined;
   status: ConnectionStatus;
+  agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   errorMessage: string | null;
   micEnabled: boolean;
   isSpeakingWhileMuted: boolean;
@@ -349,6 +370,7 @@ function AudioLessonView({
   }));
 
   const statusMeta = STATUS_META[status];
+  const agentMeta = AGENT_STATUS_META[agentStatus];
   const isConnecting = status === "connecting";
   const firstName = userName?.split(" ")[0];
   const line = teacherLines[lineIndex] ?? teacherLines[0];
@@ -436,7 +458,24 @@ function AudioLessonView({
               <ActivityIndicator size="small" color={colors.lingua.purple} />
               <Text style={styles.connectingText}>Connecting your audio…</Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={[styles.agentPill, { borderColor: agentMeta.color }]}>
+              {agentStatus === "connecting" ? (
+                <ActivityIndicator
+                  size="small"
+                  color={agentMeta.color}
+                  style={{ marginRight: 6 }}
+                />
+              ) : (
+                <View
+                  style={[styles.agentDot, { backgroundColor: agentMeta.color }]}
+                />
+              )}
+              <Text style={[styles.agentPillText, { color: agentMeta.color }]}>
+                {agentMeta.label}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Speaking-while-muted hint */}
@@ -677,6 +716,26 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins-Medium",
     fontSize: 12,
     color: colors.neutral.textPrimary,
+  },
+  agentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+  },
+  agentDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  agentPillText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 12,
   },
   mutedHint: {
     position: "absolute",

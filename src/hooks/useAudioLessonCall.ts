@@ -1,11 +1,13 @@
 /**
- * Owns the Stream audio-call lifecycle for one lesson:
+ * Owns the Stream audio-call lifecycle for one lesson AND the Vision Agent
+ * session that joins as the AI teacher:
  *
  *   fetch token  →  build client  →  create call (server)  →  join (audio-only)
+ *   → start agent  →  agent joins call
  *
- * Returns the `client` + `call` to mount under <StreamVideo>/<StreamCall>, plus
- * a coarse `phase` for the pre-join states. Fine-grained in-call states
- * (joined / reconnecting) are read from `useCallStateHooks()` inside the call.
+ * Returns the `client` + `call` to mount under <StreamVideo>/<StreamCall>, a
+ * coarse `phase` for the pre-join states, and an `agentStatus` that tracks
+ * whether the AI teacher has connected.
  */
 import { useAuth, useUser } from "@clerk/expo";
 import {
@@ -17,18 +19,41 @@ import {
 } from "@stream-io/video-react-native-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createLessonCall, fetchStreamSession } from "@/lib/stream";
+import {
+  createLessonCall,
+  fetchStreamSession,
+  startAgentSession,
+  stopAgentSession,
+  type AgentPhraseItem,
+  type AgentTeacherPrompt,
+  type AgentVocabularyItem,
+} from "@/lib/stream";
 
 /** Pre-join lifecycle phase. In-call status comes from the SDK hooks. */
 export type CallPhase = "connecting" | "ready" | "error" | "ended";
+
+/** Whether the AI teacher (Vision Agent) has joined the call. */
+export type AgentStatus = "idle" | "connecting" | "connected" | "failed";
 
 type Args = {
   lessonId: string | undefined;
   languageCode: string | undefined;
   lessonTitle: string | undefined;
+  goals?: string[];
+  vocabulary?: AgentVocabularyItem[];
+  phrases?: AgentPhraseItem[];
+  aiTeacherPrompt?: AgentTeacherPrompt | null;
 };
 
-export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args) {
+export function useAudioLessonCall({
+  lessonId,
+  languageCode,
+  lessonTitle,
+  goals,
+  vocabulary,
+  phrases,
+  aiTeacherPrompt,
+}: Args) {
   const { isSignedIn, getToken } = useAuth();
   const { user } = useUser();
 
@@ -37,6 +62,8 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
   const [phase, setPhase] = useState<CallPhase>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0); // bump to retry
+
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
 
   // Keep the latest Clerk helpers/display info in refs so the connect effect
   // doesn't re-run (and rebuild the client) just because their identity changed.
@@ -49,8 +76,6 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
     name: user?.fullName ?? undefined,
     image: user?.imageUrl ?? undefined,
   });
-  // Keep the ref current without touching it during render (refs are not for
-  // render-time reads/writes); the connect effect reads `ctx.current` later.
   useEffect(() => {
     ctx.current = {
       getToken,
@@ -58,6 +83,23 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
       image: user?.imageUrl ?? undefined,
     };
   });
+
+  // Track the active agent session so cleanup can stop it.
+  const agentSessionRef = useRef<{ sessionId: string; callId: string } | null>(
+    null,
+  );
+
+  /** Stop the agent session if one is running. */
+  const stopAgent = useCallback(async () => {
+    const session = agentSessionRef.current;
+    if (!session) return;
+    agentSessionRef.current = null;
+    try {
+      await stopAgentSession(ctx.current.getToken, session);
+    } catch (e) {
+      console.error("agent stop failed", e);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isSignedIn || !lessonId) return;
@@ -70,6 +112,7 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
       try {
         setPhase("connecting");
         setError(null);
+        setAgentStatus("idle");
 
         const { getToken: getClerkToken, name, image } = ctx.current;
         const display = { name, image };
@@ -84,12 +127,13 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
           image: session.userImage,
         };
 
-        // tokenProvider re-hits the route so the SDK can refresh on its own.
         const tokenProvider: TokenProvider = async () =>
-          (await fetchStreamSession(ctx.current.getToken, {
-            name: ctx.current.name,
-            image: ctx.current.image,
-          })).token;
+          (
+            await fetchStreamSession(ctx.current.getToken, {
+              name: ctx.current.name,
+              image: ctx.current.image,
+            })
+          ).token;
 
         const c = StreamVideoClient.getOrCreateInstance({
           apiKey: session.apiKey,
@@ -109,8 +153,7 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
         });
         if (cancelled) return;
 
-        // 3. Single Call instance for this screen; mount it before joining so
-        //    the UI can react to JOINING/JOINED/RECONNECTING states.
+        // 3. Build the Call instance and join audio-only.
         const activeCall = c.call(info.callType, info.callId, {
           reuseInstance: true,
         });
@@ -118,13 +161,41 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
         activeCall.setDisconnectionTimeout(120);
         setCall(activeCall);
 
-        // Audio-only: never publish video; make sure the mic is live.
         await activeCall.camera.disable().catch(() => {});
         await activeCall.join({ create: false });
         await activeCall.microphone.enable().catch(() => {});
         if (cancelled) return;
 
         setPhase("ready");
+
+        // 4. Start the Vision Agent so the AI teacher joins the call.
+        setAgentStatus("connecting");
+        try {
+          const agentResult = await startAgentSession(getClerkToken, {
+            lessonId,
+            languageCode,
+            lessonTitle,
+            goals,
+            vocabulary,
+            phrases,
+            aiTeacherPrompt,
+          });
+          if (!cancelled && agentResult.sessionId) {
+            agentSessionRef.current = {
+              sessionId: agentResult.sessionId,
+              callId: agentResult.callId,
+            };
+            setAgentStatus("connected");
+          } else if (!cancelled) {
+            // Agent started but no session id returned — mark failed so user knows.
+            setAgentStatus("failed");
+          }
+        } catch (agentErr) {
+          if (!cancelled) {
+            console.error("agent start failed", agentErr);
+            setAgentStatus("failed");
+          }
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Could not connect.");
@@ -134,29 +205,39 @@ export function useAudioLessonCall({ lessonId, languageCode, lessonTitle }: Args
 
     return () => {
       cancelled = true;
+      // Stop the agent when the screen unmounts or a retry is triggered.
+      void stopAgent();
       if (createdCall && createdCall.state.callingState !== CallingState.LEFT) {
         createdCall.leave().catch((e) => console.error("leave failed", e));
       }
-      createdClient?.disconnectUser().catch((e) =>
-        console.error("disconnect failed", e),
-      );
+      createdClient
+        ?.disconnectUser()
+        .catch((e) => console.error("disconnect failed", e));
       setCall(undefined);
       setClient(undefined);
+      setAgentStatus("idle");
     };
-  }, [isSignedIn, lessonId, languageCode, lessonTitle, nonce]);
+  }, [isSignedIn, lessonId, languageCode, lessonTitle, nonce, stopAgent,
+      // Intentionally excluded: goals/vocabulary/phrases/aiTeacherPrompt — these
+      // are stable lesson data that don't change during a session; including them
+      // would cause spurious reconnects.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]);
 
-  /** Leave the call locally and mark the session ended (drives the UI). */
+  /** Leave the call locally, stop the agent, and mark the session ended. */
   const endCall = useCallback(async () => {
+    await stopAgent();
     if (call && call.state.callingState !== CallingState.LEFT) {
       await call.leave().catch((e) => console.error("leave failed", e));
     }
     setPhase("ended");
-  }, [call]);
+    setAgentStatus("idle");
+  }, [call, stopAgent]);
 
   /** Re-run the whole connect flow after an error. */
   const retry = useCallback(() => {
     setNonce((n) => n + 1);
   }, []);
 
-  return { client, call, phase, error, endCall, retry } as const;
+  return { client, call, phase, error, endCall, retry, agentStatus } as const;
 }
