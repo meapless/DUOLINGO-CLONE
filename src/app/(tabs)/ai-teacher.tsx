@@ -289,16 +289,9 @@ function CallBoundView({
 }) {
   const call = useCall();
   const posthog = usePostHog();
-  const {
-    useCallCallingState,
-    useMicrophoneState,
-    useCallClosedCaptions,
-    useIsCallCaptioningInProgress,
-  } = useCallStateHooks();
+  const { useCallCallingState, useMicrophoneState } = useCallStateHooks();
   const callingState = useCallCallingState();
   const { status: micStatus, isSpeakingWhileMuted } = useMicrophoneState();
-  const closedCaptions = useCallClosedCaptions();
-  const captioningInProgress = useIsCallCaptioningInProgress();
 
   const status: ConnectionStatus =
     callingState === CallingState.JOINED
@@ -317,46 +310,37 @@ function CallBoundView({
     }
   }, [status, posthog, lesson.id]);
 
-  // Start closed captions when the call is joined; stop on leave/unmount.
-  // Widen the SDK's rolling window so our accumulator never misses an
-  // utterance's final text before it expires out of `closedCaptions`.
-  useEffect(() => {
-    if (status !== "connected" || !call) return;
-    call.updateClosedCaptionSettings({
-      visibilityDurationMs: 6000,
-      maxVisibleCaptions: 6,
-    });
-    call
-      .startClosedCaptions()
-      .catch((e) => console.warn("startClosedCaptions:", e));
-    return () => {
-      call.stopClosedCaptions().catch(() => {});
-    };
-  }, [status, call]);
-
-  // Accumulate the rolling captions into a persistent transcript so the
-  // conversation history stays on screen instead of auto-expiring. Each
-  // utterance is keyed by speaker + start time, so streaming partials update
-  // the same line in place rather than piling up duplicates.
+  // Listen for custom transcript events that the Python Vision Agent sends
+  // via agent.send_custom_event(). These come directly from Gemini's STT so
+  // the text is accurate — no re-transcription artefacts like "Power U" for
+  // "How are you?". Stream's closed-captions service is NOT used.
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   useEffect(() => {
-    if (closedCaptions.length === 0) return;
-    setTranscript((prev) => {
-      const merged = [...prev];
-      for (const cap of closedCaptions) {
-        const key = `${cap.speaker_id}-${cap.start_time}`;
-        const line: TranscriptLine = {
-          key,
-          isTeacher: cap.speaker_id === TEACHER_USER_ID,
-          text: cap.text,
-        };
-        const i = merged.findIndex((m) => m.key === key);
-        if (i >= 0) merged[i] = line;
-        else merged.push(line);
-      }
-      return merged;
+    if (!call) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unsubscribe = call.on("custom", (event: any) => {
+      const payload = event?.custom;
+      if (payload?.type !== "transcript" || !payload?.text) return;
+      const key = String(payload.msg_id || `${payload.speaker_id}-${Date.now()}`);
+      const line: TranscriptLine = {
+        key,
+        isTeacher: payload.speaker_id === TEACHER_USER_ID,
+        text: String(payload.text),
+      };
+      setTranscript((prev) => {
+        const i = prev.findIndex((m) => m.key === key);
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = line;
+          return next;
+        }
+        return [...prev, line];
+      });
     });
-  }, [closedCaptions]);
+    return () => {
+      unsubscribe?.();
+    };
+  }, [call]);
 
   // Reset the transcript whenever a fresh session starts.
   useEffect(() => {
@@ -386,7 +370,7 @@ function CallBoundView({
       onEndCall={onEndCall}
       onRetry={onRetry}
       transcript={transcript}
-      captioningInProgress={captioningInProgress}
+      isLive={status === "connected" && agentStatus === "connected"}
     />
   );
 }
@@ -405,7 +389,7 @@ function AudioLessonView({
   onEndCall,
   onRetry,
   transcript = [],
-  captioningInProgress = false,
+  isLive = false,
 }: {
   lessonTitle?: string;
   status: ConnectionStatus;
@@ -420,7 +404,7 @@ function AudioLessonView({
   onEndCall: () => void;
   onRetry: () => void;
   transcript?: TranscriptLine[];
-  captioningInProgress?: boolean;
+  isLive?: boolean;
 }) {
   const [subtitlesOn, setSubtitlesOn] = useState(true);
 
@@ -606,7 +590,7 @@ function AudioLessonView({
         ) : subtitlesOn ? (
           <TranscriptPanel
             transcript={transcript}
-            captioningInProgress={captioningInProgress}
+            isLive={isLive}
           />
         ) : (
           <View style={styles.captionsOffHint}>
@@ -644,7 +628,7 @@ function AudioLessonView({
         <View className="flex-1 items-center">
           <SubtitlesToggleButton
             on={subtitlesOn}
-            captioningInProgress={captioningInProgress}
+            isLive={isLive}
             onPress={() => setSubtitlesOn((v) => !v)}
           />
         </View>
@@ -689,17 +673,17 @@ function AudioLessonView({
 /** Persistent, auto-scrolling conversation transcript built from live captions. */
 function TranscriptPanel({
   transcript,
-  captioningInProgress,
+  isLive,
 }: {
   transcript: TranscriptLine[];
-  captioningInProgress: boolean;
+  isLive?: boolean;
 }) {
   const scrollRef = useRef<ScrollView>(null);
 
   if (transcript.length === 0) {
     return (
       <View style={styles.transcriptEmpty}>
-        {captioningInProgress ? (
+        {isLive ? (
           <View style={styles.transcriptEmptyRow}>
             <View style={styles.listeningDot} />
             <Text style={styles.transcriptEmptyText}>
@@ -758,11 +742,11 @@ function TranscriptPanel({
 
 function SubtitlesToggleButton({
   on,
-  captioningInProgress,
+  isLive,
   onPress,
 }: {
   on: boolean;
-  captioningInProgress: boolean;
+  isLive?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -772,7 +756,7 @@ function SubtitlesToggleButton({
         style={[styles.subtitlesBtn, on && styles.subtitlesBtnActive]}
         hitSlop={8}
       >
-        {captioningInProgress && on ? (
+        {isLive && on ? (
           <View style={styles.captioningDot} />
         ) : null}
         <SubtitlesIcon

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from dotenv import load_dotenv
@@ -99,6 +100,45 @@ async def join_call(agent: Agent, call_type: str, call_id: str, **kwargs) -> Non
         )
 
     async with agent.join(call):
+        # Patch conversation.upsert_message so that each *completed* transcript
+        # is also sent as a Stream Video custom event. The mobile app listens for
+        # these and displays Gemini's own accurate transcripts instead of relying
+        # on Stream's server-side re-transcription (which garbles synthesised audio).
+        conv = agent.conversation
+        if conv is not None:
+            _orig_upsert = conv.upsert_message
+
+            async def _send_transcript_event(role: str, user_id: str, text: str, msg_id: str) -> None:
+                try:
+                    await agent.send_custom_event({
+                        "type": "transcript",
+                        "role": role,
+                        "speaker_id": user_id,
+                        "msg_id": msg_id,
+                        "text": text,
+                    })
+                except Exception as exc:
+                    logging.debug("Custom transcript event skipped: %s", exc)
+
+            async def _upsert_with_event(
+                role, user_id, content="", message_id=None,
+                content_index=None, completed=True, replace=False, original=None,
+            ):
+                result = await _orig_upsert(
+                    role=role, user_id=user_id, content=content,
+                    message_id=message_id, content_index=content_index,
+                    completed=completed, replace=replace, original=original,
+                )
+                if completed and content:
+                    # Fire-and-forget so we never block the transcript hot path.
+                    msg_id = (result.id if result else None) or message_id or ""
+                    asyncio.create_task(
+                        _send_transcript_event(role, user_id, content, str(msg_id))
+                    )
+                return result
+
+            conv.upsert_message = _upsert_with_event
+
         await agent.simple_response(opening_prompt)
         await agent.finish()
 
