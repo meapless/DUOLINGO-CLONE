@@ -4,15 +4,15 @@ import {
   StreamVideo,
   useCall,
   useCallStateHooks,
-  type CallClosedCaption,
 } from "@stream-io/video-react-native-sdk";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -36,7 +36,6 @@ import {
   ChevronLeftIcon,
   MicIcon,
   PhoneIcon,
-  SpeakerIcon,
   SubtitlesIcon,
   VideoIcon,
 } from "@/components/icons";
@@ -50,15 +49,12 @@ import type { LanguageCode, Lesson } from "@/types/learning";
 /** Stream user ID assigned to the Vision Agent in session+api.ts and agent.py */
 const TEACHER_USER_ID = "lingua-teacher";
 
-type TeacherLine = { text: string; translation?: string };
-
-const PRAISE: Record<LanguageCode, TeacherLine> = {
-  es: { text: "¡Muy bien! 👏", translation: "That was great!" },
-  fr: { text: "Très bien ! 👏", translation: "That was great!" },
-  de: { text: "Sehr gut! 👏", translation: "That was great!" },
-  ja: { text: "とても良い！👏", translation: "That was great!" },
-  ko: { text: "아주 좋아요! 👏", translation: "That was great!" },
-  zh: { text: "很好！👏", translation: "That was great!" },
+/** One accumulated line of the live conversation transcript. */
+type TranscriptLine = {
+  /** Stable per-utterance key: `${speaker_id}-${start_time}`. */
+  key: string;
+  isTeacher: boolean;
+  text: string;
 };
 
 const FEEDBACK: { label: string; value: string; color: string }[] = [
@@ -107,26 +103,6 @@ function resolveLesson(
     langLessons.find((l) => l.phrases.length > 0) ??
     langLessons[0]
   );
-}
-
-function buildTeacherLines(lesson: Lesson, code: LanguageCode): TeacherLine[] {
-  const lines: TeacherLine[] = [PRAISE[code]];
-
-  lesson.aiTeacherPrompt?.conversationStarters.forEach((text) =>
-    lines.push({ text }),
-  );
-
-  lesson.phrases.forEach((p) =>
-    lines.push({ text: p.text, translation: p.translation }),
-  );
-
-  if (lines.length === 1) {
-    lesson.vocabulary.forEach((v) =>
-      lines.push({ text: v.word, translation: v.translation }),
-    );
-  }
-
-  return lines;
 }
 
 export default function AITeacherScreen() {
@@ -214,8 +190,6 @@ export default function AITeacherScreen() {
   if (phase === "error" || !client || !call) {
     return (
       <AudioLessonView
-        lesson={lesson}
-        lessonCode={lessonCode ?? "es"}
         status={phase === "error" ? "error" : "connecting"}
         agentStatus={agentStatus}
         errorMessage={phase === "error" ? error : null}
@@ -235,7 +209,6 @@ export default function AITeacherScreen() {
       <StreamCall call={call}>
         <CallBoundView
           lesson={lesson}
-          lessonCode={lessonCode ?? "es"}
           agentStatus={agentStatus}
           onEndCall={leaveAndDismiss}
           onRetry={retry}
@@ -247,13 +220,11 @@ export default function AITeacherScreen() {
 
 function CallBoundView({
   lesson,
-  lessonCode,
   agentStatus,
   onEndCall,
   onRetry,
 }: {
   lesson: Lesson;
-  lessonCode: LanguageCode;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   onEndCall: () => void;
   onRetry: () => void;
@@ -289,8 +260,14 @@ function CallBoundView({
   }, [status, posthog, lesson.id]);
 
   // Start closed captions when the call is joined; stop on leave/unmount.
+  // Widen the SDK's rolling window so our accumulator never misses an
+  // utterance's final text before it expires out of `closedCaptions`.
   useEffect(() => {
     if (status !== "connected" || !call) return;
+    call.updateClosedCaptionSettings({
+      visibilityDurationMs: 6000,
+      maxVisibleCaptions: 6,
+    });
     call
       .startClosedCaptions()
       .catch((e) => console.warn("startClosedCaptions:", e));
@@ -298,6 +275,35 @@ function CallBoundView({
       call.stopClosedCaptions().catch(() => {});
     };
   }, [status, call]);
+
+  // Accumulate the rolling captions into a persistent transcript so the
+  // conversation history stays on screen instead of auto-expiring. Each
+  // utterance is keyed by speaker + start time, so streaming partials update
+  // the same line in place rather than piling up duplicates.
+  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  useEffect(() => {
+    if (closedCaptions.length === 0) return;
+    setTranscript((prev) => {
+      const merged = [...prev];
+      for (const cap of closedCaptions) {
+        const key = `${cap.speaker_id}-${cap.start_time}`;
+        const line: TranscriptLine = {
+          key,
+          isTeacher: cap.speaker_id === TEACHER_USER_ID,
+          text: cap.text,
+        };
+        const i = merged.findIndex((m) => m.key === key);
+        if (i >= 0) merged[i] = line;
+        else merged.push(line);
+      }
+      return merged;
+    });
+  }, [closedCaptions]);
+
+  // Reset the transcript whenever a fresh session starts.
+  useEffect(() => {
+    if (status === "connecting") setTranscript([]);
+  }, [status]);
 
   const enableMic = useCallback(() => {
     call?.microphone.enable().catch((e) => console.error("mic enable", e));
@@ -309,8 +315,6 @@ function CallBoundView({
 
   return (
     <AudioLessonView
-      lesson={lesson}
-      lessonCode={lessonCode}
       status={status}
       agentStatus={agentStatus}
       errorMessage={null}
@@ -321,15 +325,13 @@ function CallBoundView({
       onMicPressOut={disableMic}
       onEndCall={onEndCall}
       onRetry={onRetry}
-      closedCaptions={closedCaptions}
+      transcript={transcript}
       captioningInProgress={captioningInProgress}
     />
   );
 }
 
 function AudioLessonView({
-  lesson,
-  lessonCode,
   status,
   agentStatus,
   errorMessage,
@@ -340,11 +342,9 @@ function AudioLessonView({
   onMicPressOut,
   onEndCall,
   onRetry,
-  closedCaptions = [],
+  transcript = [],
   captioningInProgress = false,
 }: {
-  lesson: Lesson;
-  lessonCode: LanguageCode;
   status: ConnectionStatus;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   errorMessage: string | null;
@@ -355,35 +355,37 @@ function AudioLessonView({
   onMicPressOut: () => void;
   onEndCall: () => void;
   onRetry: () => void;
-  closedCaptions?: CallClosedCaption[];
+  transcript?: TranscriptLine[];
   captioningInProgress?: boolean;
 }) {
-  const teacherLines = useMemo(
-    () => buildTeacherLines(lesson, lessonCode),
-    [lesson, lessonCode],
-  );
-
-  const [lineIndex, setLineIndex] = useState(0);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
 
+  // Two staggered rings ripple outward; the mascot floats gently above them.
   const pulse = useSharedValue(0);
+  const float = useSharedValue(0);
   useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
-  }, [pulse]);
+    pulse.value = withRepeat(withTiming(1, { duration: 2200 }), -1, false);
+    float.value = withRepeat(withTiming(1, { duration: 2600 }), -1, true);
+  }, [pulse, float]);
 
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.14 }],
-    opacity: 0.35 - pulse.value * 0.25,
+  const ringInnerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 0.85 + pulse.value * 0.35 }],
+    opacity: 0.4 - pulse.value * 0.4,
+  }));
+  const ringOuterStyle = useAnimatedStyle(() => {
+    const p = (pulse.value + 0.5) % 1; // half-phase offset for layered ripple
+    return {
+      transform: [{ scale: 0.85 + p * 0.45 }],
+      opacity: 0.22 - p * 0.22,
+    };
+  });
+  const floatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -6 * float.value }],
   }));
 
   const statusMeta = STATUS_META[status];
   const agentMeta = AGENT_STATUS_META[agentStatus];
   const isConnecting = status === "connecting";
-  const line = teacherLines[lineIndex] ?? teacherLines[0];
-
-  // Show live captions only when subtitles are on and captions are available.
-  const showLiveCaptions =
-    subtitlesOn && closedCaptions.length > 0 && status !== "error";
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -434,48 +436,53 @@ function AudioLessonView({
           <Rect x="0" y="0" width="100%" height="100%" fill="url(#stageGrad)" />
         </Svg>
 
-        {/* Teacher avatar — fills stage and truly centers the mascot */}
+        {/* Teacher avatar — hero zone, mascot floats above layered ripple rings */}
         <View className="flex-1 items-center justify-center">
-          <Animated.View style={[styles.pulseRing, ringStyle]} />
-          <View style={styles.avatarWrap}>
+          <Animated.View style={[styles.pulseRing, ringOuterStyle]} />
+          <Animated.View style={[styles.pulseRing, ringInnerStyle]} />
+          <Animated.View style={[styles.avatarWrap, floatStyle]}>
             <Image
               source={images.mascotWelcome}
               style={styles.avatar}
               resizeMode="contain"
             />
-          </View>
-        </View>
+          </Animated.View>
 
-        {/* Connection / agent status pill — anchored above the speech bubble */}
-        <View style={styles.pillAnchor}>
-          {isConnecting ? (
-            <View style={styles.connectingPill}>
-              <ActivityIndicator size="small" color={colors.lingua.purple} />
-              <Text style={styles.connectingText}>Connecting your audio…</Text>
-            </View>
-          ) : (
-            <View style={[styles.agentPill, { borderColor: agentMeta.color }]}>
-              {agentStatus === "connecting" ? (
-                <ActivityIndicator
-                  size="small"
-                  color={agentMeta.color}
-                  style={{ marginRight: 6 }}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.agentDot,
-                    { backgroundColor: agentMeta.color },
-                  ]}
-                />
-              )}
-              <Text
-                style={[styles.agentPillText, { color: agentMeta.color }]}
+          {/* Connection / agent status pill — sits just below the mascot */}
+          <View style={styles.pillWrap}>
+            {isConnecting ? (
+              <View style={styles.connectingPill}>
+                <ActivityIndicator size="small" color={colors.lingua.purple} />
+                <Text style={styles.connectingText}>
+                  Connecting your audio…
+                </Text>
+              </View>
+            ) : (
+              <View
+                style={[styles.agentPill, { borderColor: agentMeta.color }]}
               >
-                {agentMeta.label}
-              </Text>
-            </View>
-          )}
+                {agentStatus === "connecting" ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={agentMeta.color}
+                    style={{ marginRight: 6 }}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.agentDot,
+                      { backgroundColor: agentMeta.color },
+                    ]}
+                  />
+                )}
+                <Text
+                  style={[styles.agentPillText, { color: agentMeta.color }]}
+                >
+                  {agentMeta.label}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Speaking-while-muted hint */}
@@ -485,7 +492,7 @@ function AudioLessonView({
           </View>
         ) : null}
 
-        {/* Error banner */}
+        {/* Bottom panel: error · live transcript · captions-off hint */}
         {status === "error" ? (
           <View style={styles.bubble}>
             <View className="flex-1">
@@ -500,60 +507,17 @@ function AudioLessonView({
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
-        ) : showLiveCaptions ? (
-          /* Live captions overlay — replaces static bubble while captions are active */
-          <View style={styles.captionOverlay}>
-            {closedCaptions.map((caption) => {
-              const isTeacher = caption.speaker_id === TEACHER_USER_ID;
-              return (
-                <View
-                  key={caption.id}
-                  style={[
-                    styles.captionItem,
-                    isTeacher
-                      ? styles.captionItemTeacher
-                      : styles.captionItemUser,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.captionSpeaker,
-                      {
-                        color: isTeacher
-                          ? colors.lingua.purple
-                          : colors.lingua.green,
-                      },
-                    ]}
-                  >
-                    {isTeacher ? "AI Teacher" : "You"}
-                  </Text>
-                  <Text style={styles.captionText}>{caption.text}</Text>
-                </View>
-              );
-            })}
-          </View>
+        ) : subtitlesOn ? (
+          <TranscriptPanel
+            transcript={transcript}
+            captioningInProgress={captioningInProgress}
+          />
         ) : (
-          /* Static teacher line — shown when no live captions */
-          <View style={styles.bubble}>
-            <View className="flex-1">
-              <Text className="font-poppins-semibold text-body-lg text-text-primary">
-                {line.text}
-              </Text>
-              {line.translation ? (
-                <Text className="mt-0.5 font-poppins text-body-sm text-text-secondary">
-                  {line.translation}
-                </Text>
-              ) : null}
-            </View>
-            <Pressable
-              onPress={() =>
-                setLineIndex((i) => (i + 1) % teacherLines.length)
-              }
-              hitSlop={8}
-              style={styles.speakerBtn}
-            >
-              <SpeakerIcon size={20} color={colors.lingua.purple} />
-            </Pressable>
+          <View style={styles.captionsOffHint}>
+            <SubtitlesIcon size={18} color={colors.neutral.textSecondary} />
+            <Text style={styles.captionsOffText}>
+              Captions are off · tap to follow along
+            </Text>
           </View>
         )}
       </View>
@@ -601,6 +565,76 @@ function AudioLessonView({
         ))}
       </View>
     </SafeAreaView>
+  );
+}
+
+/** Persistent, auto-scrolling conversation transcript built from live captions. */
+function TranscriptPanel({
+  transcript,
+  captioningInProgress,
+}: {
+  transcript: TranscriptLine[];
+  captioningInProgress: boolean;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+
+  if (transcript.length === 0) {
+    return (
+      <View style={styles.transcriptEmpty}>
+        {captioningInProgress ? (
+          <View style={styles.transcriptEmptyRow}>
+            <View style={styles.listeningDot} />
+            <Text style={styles.transcriptEmptyText}>
+              Listening… your conversation will appear here
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.transcriptEmptyText}>
+            Hold the mic and start speaking with your teacher
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.transcriptCard}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.transcriptScroll}
+        contentContainerStyle={styles.transcriptContent}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() =>
+          scrollRef.current?.scrollToEnd({ animated: true })
+        }
+      >
+        {transcript.map((line) => (
+          <View
+            key={line.key}
+            style={[
+              styles.transcriptRow,
+              line.isTeacher
+                ? styles.transcriptRowTeacher
+                : styles.transcriptRowUser,
+            ]}
+          >
+            <Text
+              style={[
+                styles.transcriptSpeaker,
+                {
+                  color: line.isTeacher
+                    ? colors.lingua.purple
+                    : colors.lingua.green,
+                },
+              ]}
+            >
+              {line.isTeacher ? "AI Teacher" : "You"}
+            </Text>
+            <Text style={styles.transcriptText}>{line.text}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -738,11 +772,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: "hidden",
   },
-  pillAnchor: {
-    position: "absolute",
-    bottom: 108,
-    left: 0,
-    right: 0,
+  pillWrap: {
+    marginTop: 18,
     alignItems: "center",
   },
   pulseRing: {
@@ -811,7 +842,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff",
   },
-  // Static teacher line bubble (shown when no live captions are active)
+  // Error bubble (shown when the call fails)
   bubble: {
     position: "absolute",
     left: 16,
@@ -829,15 +860,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
-  speakerBtn: {
-    marginLeft: 12,
-    height: 38,
-    width: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f1eeff",
-  },
   retryBtn: {
     marginLeft: 12,
     height: 38,
@@ -852,44 +874,104 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#ffffff",
   },
-  // Live captions overlay
-  captionOverlay: {
+  // Live conversation transcript (persistent, scrollable)
+  transcriptCard: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 16,
-    gap: 6,
-  },
-  captionItem: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#ffffff",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    maxHeight: 168,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    borderLeftWidth: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  captionItemTeacher: {
-    borderLeftColor: colors.lingua.purple,
+  transcriptScroll: {
+    maxHeight: 152,
   },
-  captionItemUser: {
-    borderLeftColor: colors.lingua.green,
+  transcriptContent: {
+    gap: 6,
+    paddingVertical: 2,
   },
-  captionSpeaker: {
+  transcriptRow: {
+    maxWidth: "88%",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  transcriptRowTeacher: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f1eeff",
+    borderTopLeftRadius: 4,
+  },
+  transcriptRowUser: {
+    alignSelf: "flex-end",
+    backgroundColor: "#e9f8ef",
+    borderTopRightRadius: 4,
+  },
+  transcriptSpeaker: {
     fontFamily: "Poppins-SemiBold",
     fontSize: 10,
     letterSpacing: 0.4,
     textTransform: "uppercase",
     marginBottom: 2,
   },
-  captionText: {
+  transcriptText: {
     fontFamily: "Poppins-Medium",
     fontSize: 14,
     color: colors.neutral.textPrimary,
     lineHeight: 20,
+  },
+  transcriptEmpty: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.7)",
+  },
+  transcriptEmptyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  transcriptEmptyText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 13,
+    color: colors.neutral.textSecondary,
+    textAlign: "center",
+  },
+  listeningDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+    backgroundColor: colors.lingua.green,
+  },
+  captionsOffHint: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.7)",
+  },
+  captionsOffText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 13,
+    color: colors.neutral.textSecondary,
   },
   // Subtitles toggle button
   subtitlesBtn: {
