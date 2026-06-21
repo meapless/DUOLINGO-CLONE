@@ -161,11 +161,14 @@ export function useAudioLessonCall({
         activeCall.setDisconnectionTimeout(120);
         setCall(activeCall);
 
-        // Push-to-speak: disable camera and mic BEFORE joining so the SFU
-        // never sees an audio track until the user holds the button.
+        // Open mic by default: camera off, but publish a continuous audio
+        // track so the realtime agent can hear the student and handle
+        // turn-taking itself. Toggling the track per-utterance (push-to-speak)
+        // forces the SFU to renegotiate and makes the agent miss audio, so we
+        // keep the track up and let the UI mute/unmute on top of it.
         await activeCall.camera.disable().catch(() => {});
-        await activeCall.microphone.disable().catch(() => {});
         await activeCall.join({ create: false });
+        await activeCall.microphone.enable().catch(() => {});
         if (cancelled) return;
 
         setPhase("ready");

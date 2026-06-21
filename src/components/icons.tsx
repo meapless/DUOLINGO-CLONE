@@ -447,3 +447,40 @@ export function SpeakerIcon({ size = 22, color = "#6c4ef5" }: IconProps) {
     </Svg>
   );
 }
+
+/* ── Play (start a lesson) ── */
+export function PlayIcon({ size = 22, color = "#ffffff" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M8 5.5v13l11-6.5z" fill={color} />
+    </Svg>
+  );
+}
+
+/* ── Mic muted (open-mic mute toggle) ── */
+export function MicOffIcon({ size = 24, color = "#001328" }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 9V5a3 3 0 015.83-1M15 11.3V5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17 11a5 5 0 01-7.54 4.3M5 11a7 7 0 0011.95 4.95M12 18.5V22"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 3l18 18"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}

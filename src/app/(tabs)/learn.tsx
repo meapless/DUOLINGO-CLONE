@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { usePostHog } from "posthog-react-native";
 import { useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 
@@ -45,6 +45,7 @@ export default function LearnScreen() {
   const router = useRouter();
   const posthog = usePostHog();
   const [activeTab, setActiveTab] = useState<Tab>("lessons");
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
 
   const code = useLanguageStore((s) => s.selectedLanguage);
   const completedLessons = useLessonStore((s) => s.completedLessons);
@@ -60,41 +61,29 @@ export default function LearnScreen() {
     completedLessons.includes(l.id),
   ).length;
 
-  function handleLessonPress(lesson: Lesson) {
-    const status = getLessonStatus(lesson, completedLessons, inProgressLessonId);
-    posthog?.capture("lesson_opened", {
+  const selectedLesson = unitLessons.find((l) => l.id === selectedLessonId);
+
+  // Tapping a card selects it (revealing Start); tapping it again deselects.
+  function handleSelect(lesson: Lesson) {
+    setSelectedLessonId((prev) => (prev === lesson.id ? null : lesson.id));
+    posthog?.capture("lesson_selected", {
       lesson_id: lesson.id,
       language_code: code,
-      status,
     });
+  }
 
-    if (status === "completed") {
-      Alert.alert(lesson.title, "You've completed this lesson! Would you like to review it?", [
-        { text: "Not now", style: "cancel" },
-        { text: "Review", onPress: () => Alert.alert("Coming soon", "Lesson review is coming in the next update!") },
-      ]);
-      return;
-    }
-
-    if (status === "in-progress") {
-      Alert.alert("Continue lesson", `Resume "${lesson.title}"?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Continue", onPress: () => Alert.alert("Coming soon", "The lesson player is coming in the next update!") },
-      ]);
-      return;
-    }
-
-    // available — set it as in progress
-    Alert.alert("Start lesson", `Start "${lesson.title}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Start",
-        onPress: () => {
-          setInProgress(lesson.id);
-          Alert.alert("Coming soon", "The lesson player is coming in the next update!");
-        },
-      },
-    ]);
+  // Start opens the AI teacher for this lesson, carrying the lesson id so the
+  // teacher teaches that lesson's content (goals, vocabulary, phrases).
+  function handleStart(lesson: Lesson) {
+    posthog?.capture("lesson_started", {
+      lesson_id: lesson.id,
+      language_code: code,
+    });
+    setInProgress(lesson.id);
+    router.push({
+      pathname: "/ai-teacher",
+      params: { lessonId: lesson.id },
+    });
   }
 
   if (!code || !currentUnit) {
@@ -121,10 +110,12 @@ export default function LearnScreen() {
 
         <View className="flex-1 px-1">
           <Text className="font-poppins-bold text-h3 text-text-primary" numberOfLines={1}>
-            {currentUnit.title}
+            {selectedLesson ? selectedLesson.title : currentUnit.title}
           </Text>
-          <Text className="font-poppins-medium text-body-sm text-text-secondary">
-            Unit {currentUnit.order} · {completedCount} / {unitLessons.length} lessons
+          <Text className="font-poppins-medium text-body-sm text-text-secondary" numberOfLines={1}>
+            {selectedLesson
+              ? "Tap Start to begin your lesson"
+              : `Unit ${currentUnit.order} · ${completedCount} / ${unitLessons.length} lessons`}
           </Text>
         </View>
 
@@ -208,7 +199,9 @@ export default function LearnScreen() {
                 lesson={lesson}
                 lessonNumber={index + 1}
                 status={status}
-                onPress={() => handleLessonPress(lesson)}
+                selected={selectedLessonId === lesson.id}
+                onPress={() => handleSelect(lesson)}
+                onStart={() => handleStart(lesson)}
               />
             );
           })}

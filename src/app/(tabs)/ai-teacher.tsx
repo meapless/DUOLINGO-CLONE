@@ -35,6 +35,7 @@ import {
   BellIcon,
   ChevronLeftIcon,
   MicIcon,
+  MicOffIcon,
   PhoneIcon,
   SubtitlesIcon,
   VideoIcon,
@@ -190,6 +191,7 @@ export default function AITeacherScreen() {
   if (phase === "error" || !client || !call) {
     return (
       <AudioLessonView
+        lessonTitle={lesson.title}
         status={phase === "error" ? "error" : "connecting"}
         agentStatus={agentStatus}
         errorMessage={phase === "error" ? error : null}
@@ -209,6 +211,7 @@ export default function AITeacherScreen() {
       <StreamCall call={call}>
         <CallBoundView
           lesson={lesson}
+          lessonTitle={lesson.title}
           agentStatus={agentStatus}
           onEndCall={leaveAndDismiss}
           onRetry={retry}
@@ -220,11 +223,13 @@ export default function AITeacherScreen() {
 
 function CallBoundView({
   lesson,
+  lessonTitle,
   agentStatus,
   onEndCall,
   onRetry,
 }: {
   lesson: Lesson;
+  lessonTitle: string;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   onEndCall: () => void;
   onRetry: () => void;
@@ -315,6 +320,7 @@ function CallBoundView({
 
   return (
     <AudioLessonView
+      lessonTitle={lessonTitle}
       status={status}
       agentStatus={agentStatus}
       errorMessage={null}
@@ -332,6 +338,7 @@ function CallBoundView({
 }
 
 function AudioLessonView({
+  lessonTitle,
   status,
   agentStatus,
   errorMessage,
@@ -345,6 +352,7 @@ function AudioLessonView({
   transcript = [],
   captioningInProgress = false,
 }: {
+  lessonTitle?: string;
   status: ConnectionStatus;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
   errorMessage: string | null;
@@ -359,6 +367,20 @@ function AudioLessonView({
   captioningInProgress?: boolean;
 }) {
   const [subtitlesOn, setSubtitlesOn] = useState(true);
+
+  // Mic mode: open mic (continuous, default) keeps the realtime agent hearing
+  // you naturally; push-to-talk only opens the mic while the button is held.
+  const [micMode, setMicMode] = useState<"open" | "ptt">("open");
+
+  // Apply the desired mic state whenever the mode changes (or once we can
+  // toggle). Open → unmuted; push-to-talk → muted until the button is held.
+  // micEnabled is intentionally excluded so a manual mute in open mode sticks.
+  useEffect(() => {
+    if (!canToggleMic) return;
+    if (micMode === "open") onMicPressIn();
+    else onMicPressOut();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micMode, canToggleMic]);
 
   // Two staggered rings ripple outward; the mascot floats gently above them.
   const pulse = useSharedValue(0);
@@ -396,8 +418,14 @@ function AudioLessonView({
         </Pressable>
 
         <View className="ml-2 flex-1">
-          <Text className="font-poppins-semibold text-h4 text-text-primary">
+          <Text className="font-poppins-medium text-caption text-text-secondary">
             AI Teacher
+          </Text>
+          <Text
+            className="font-poppins-semibold text-h4 text-text-primary"
+            numberOfLines={1}
+          >
+            {lessonTitle ?? "Conversation"}
           </Text>
           <View className="mt-0.5 flex-row items-center">
             <View
@@ -438,15 +466,17 @@ function AudioLessonView({
 
         {/* Teacher avatar — hero zone, mascot floats above layered ripple rings */}
         <View className="flex-1 items-center justify-center">
-          <Animated.View style={[styles.pulseRing, ringOuterStyle]} />
-          <Animated.View style={[styles.pulseRing, ringInnerStyle]} />
-          <Animated.View style={[styles.avatarWrap, floatStyle]}>
-            <Image
-              source={images.mascotWelcome}
-              style={styles.avatar}
-              resizeMode="contain"
-            />
-          </Animated.View>
+          <View style={styles.haloWrap}>
+            <Animated.View style={[styles.pulseRing, ringOuterStyle]} />
+            <Animated.View style={[styles.pulseRing, ringInnerStyle]} />
+            <Animated.View style={[styles.avatarWrap, floatStyle]}>
+              <Image
+                source={images.mascotWelcome}
+                style={styles.avatar}
+                resizeMode="contain"
+              />
+            </Animated.View>
+          </View>
 
           {/* Connection / agent status pill — sits just below the mascot */}
           <View style={styles.pillWrap}>
@@ -522,8 +552,29 @@ function AudioLessonView({
         )}
       </View>
 
-      {/* Controls: subtitles toggle + push-to-speak + end call */}
-      <View className="flex-row items-end pt-5 pb-1 px-6">
+      {/* Mic mode: open mic (default) vs push-to-talk */}
+      <View style={styles.modeToggle}>
+        {(["open", "ptt"] as const).map((mode) => (
+          <Pressable
+            key={mode}
+            onPress={() => setMicMode(mode)}
+            style={[styles.modeChip, micMode === mode && styles.modeChipActive]}
+            hitSlop={6}
+          >
+            <Text
+              style={[
+                styles.modeChipText,
+                micMode === mode && styles.modeChipTextActive,
+              ]}
+            >
+              {mode === "open" ? "Open mic" : "Hold to talk"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Controls: subtitles toggle + mic + end call */}
+      <View className="flex-row items-end pt-2 pb-1 px-6">
         <View className="flex-1 items-center">
           <SubtitlesToggleButton
             on={subtitlesOn}
@@ -532,11 +583,12 @@ function AudioLessonView({
           />
         </View>
         <View className="flex-1 items-center">
-          <PushToSpeakButton
+          <MicButton
+            mode={micMode}
             micEnabled={micEnabled}
-            canSpeak={canToggleMic}
-            onPressIn={onMicPressIn}
-            onPressOut={onMicPressOut}
+            canToggle={canToggleMic}
+            onEnable={onMicPressIn}
+            onDisable={onMicPressOut}
           />
         </View>
         <View className="flex-1 items-center">
@@ -590,7 +642,7 @@ function TranscriptPanel({
           </View>
         ) : (
           <Text style={styles.transcriptEmptyText}>
-            Hold the mic and start speaking with your teacher
+            Start speaking — your conversation will appear here
           </Text>
         )}
       </View>
@@ -669,54 +721,77 @@ function SubtitlesToggleButton({
   );
 }
 
-/** Large hold-to-speak button. Enables mic while held, disables on release. */
-function PushToSpeakButton({
+/**
+ * Mic control that adapts to the selected mode:
+ *  - "open": tap to mute / unmute a continuously-published track.
+ *  - "ptt":  hold to open the mic, release to close it.
+ */
+function MicButton({
+  mode,
   micEnabled,
-  canSpeak,
-  onPressIn,
-  onPressOut,
+  canToggle,
+  onEnable,
+  onDisable,
 }: {
+  mode: "open" | "ptt";
   micEnabled: boolean;
-  canSpeak: boolean;
-  onPressIn: () => void;
-  onPressOut: () => void;
+  canToggle: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
 }) {
   const scale = useSharedValue(1);
-
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
+  const isOpen = mode === "open";
+
+  const handleToggleMute = useCallback(() => {
+    if (!canToggle) return;
+    if (micEnabled) onDisable();
+    else onEnable();
+  }, [canToggle, micEnabled, onEnable, onDisable]);
+
   const handlePressIn = useCallback(() => {
     scale.value = withTiming(0.9, { duration: 100 });
-    onPressIn();
-  }, [onPressIn, scale]);
+    onEnable();
+  }, [onEnable, scale]);
 
   const handlePressOut = useCallback(() => {
     scale.value = withTiming(1, { duration: 150 });
-    onPressOut();
-  }, [onPressOut, scale]);
+    onDisable();
+  }, [onDisable, scale]);
+
+  const label = isOpen
+    ? micEnabled
+      ? "Tap to mute"
+      : "Muted"
+    : micEnabled
+      ? "Speaking…"
+      : "Hold to speak";
 
   return (
     <View className="items-center">
       <Animated.View style={animStyle}>
         <Pressable
-          onPressIn={canSpeak ? handlePressIn : undefined}
-          onPressOut={canSpeak ? handlePressOut : undefined}
+          onPress={isOpen ? handleToggleMute : undefined}
+          onPressIn={!isOpen && canToggle ? handlePressIn : undefined}
+          onPressOut={!isOpen && canToggle ? handlePressOut : undefined}
           style={[
             styles.pushToSpeakBtn,
             micEnabled && styles.pushToSpeakActive,
-            !canSpeak && styles.pushToSpeakDisabled,
+            !canToggle && styles.pushToSpeakDisabled,
           ]}
         >
-          <MicIcon
-            size={28}
-            color={micEnabled ? "#ffffff" : colors.neutral.textPrimary}
-          />
+          {micEnabled ? (
+            <MicIcon size={28} color="#ffffff" />
+          ) : (
+            <MicOffIcon size={28} color={colors.neutral.textPrimary} />
+          )}
         </Pressable>
       </Animated.View>
       <Text className="mt-2 font-poppins-medium text-caption text-text-secondary">
-        {micEnabled ? "Speaking…" : "Hold to speak"}
+        {label}
       </Text>
     </View>
   );
@@ -776,11 +851,21 @@ const styles = StyleSheet.create({
     marginTop: 18,
     alignItems: "center",
   },
+  // Fixed-size, centered container so the absolute rings stay concentric
+  // with the mascot (absolute children with no insets pin to top-left).
+  haloWrap: {
+    width: 300,
+    height: 300,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pulseRing: {
     position: "absolute",
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    top: 0,
+    left: 0,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
     backgroundColor: colors.lingua.purple,
   },
   avatarWrap: {
@@ -972,6 +1057,31 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins-Medium",
     fontSize: 13,
     color: colors.neutral.textSecondary,
+  },
+  // Mic-mode segmented toggle
+  modeToggle: {
+    flexDirection: "row",
+    alignSelf: "center",
+    backgroundColor: colors.neutral.surface,
+    borderRadius: 999,
+    padding: 4,
+    marginTop: 8,
+  },
+  modeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  modeChipActive: {
+    backgroundColor: colors.lingua.purple,
+  },
+  modeChipText: {
+    fontFamily: "Poppins-Medium",
+    fontSize: 12,
+    color: colors.neutral.textSecondary,
+  },
+  modeChipTextActive: {
+    color: "#ffffff",
   },
   // Subtitles toggle button
   subtitlesBtn: {
