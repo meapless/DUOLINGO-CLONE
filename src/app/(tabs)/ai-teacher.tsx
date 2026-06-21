@@ -107,7 +107,7 @@ function resolveLesson(
 }
 
 export default function AITeacherScreen() {
-  const { lessonId } = useLocalSearchParams<{ lessonId?: string }>();
+  const { lessonId, lessonNumber } = useLocalSearchParams<{ lessonId?: string; lessonNumber?: string }>();
   const router = useRouter();
   const posthog = usePostHog();
 
@@ -115,6 +115,40 @@ export default function AITeacherScreen() {
   const lesson = resolveLesson(lessonId, code);
 
   const lessonCode = (lesson?.id.split("-")[0] as LanguageCode) ?? code;
+
+  // Stable refs so the unmount cleanup closure always sees the latest values.
+  const lessonStartTimeRef = useRef<number>(Date.now());
+  const lessonCompletedRef = useRef(false);
+  const lessonRef = useRef(lesson);
+  const posthogRef = useRef(posthog);
+  lessonRef.current = lesson;
+  posthogRef.current = posthog;
+
+  // Fire lesson_started once on mount (when lesson resolves).
+  const didFireStartRef = useRef(false);
+  useEffect(() => {
+    if (!lesson || didFireStartRef.current) return;
+    didFireStartRef.current = true;
+    lessonStartTimeRef.current = Date.now();
+    posthog?.capture("lesson_started", {
+      lesson_id: lesson.id,
+      language: lessonCode ?? "",
+      lesson_number: lessonNumber ? parseInt(lessonNumber, 10) : 1,
+    });
+  }, [lesson, lessonCode, lessonNumber, posthog]);
+
+  // Fire lesson_abandoned on unmount unless the lesson was completed.
+  useEffect(() => {
+    return () => {
+      if (!lessonRef.current || lessonCompletedRef.current) return;
+      const elapsed = Math.round((Date.now() - lessonStartTimeRef.current) / 1000);
+      posthogRef.current?.capture("lesson_abandoned", {
+        lesson_id: lessonRef.current.id,
+        time_into_lesson_seconds: elapsed,
+        last_question_index: 0,
+      });
+    };
+  }, []);
 
   const { client, call, phase, error, endCall, retry, agentStatus } =
     useAudioLessonCall({

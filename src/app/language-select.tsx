@@ -46,7 +46,11 @@ export default function LanguageSelect() {
 
   const handleConfirm = () => {
     if (!selected) return;
-    posthog?.capture("language_selected", { language_code: selected });
+    const selectedLang = allLanguages.find((l) => l.code === selected);
+    posthog?.capture("language_selected", {
+      language_code: selected,
+      language_name: selectedLang?.name ?? selected,
+    });
     // Persist the choice, then go to home. `replace` so the picker isn't left
     // on the back stack (this screen can be the entry point on first launch).
     setLanguage(selected);

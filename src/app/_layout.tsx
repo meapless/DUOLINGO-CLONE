@@ -5,6 +5,7 @@ import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { PostHogProvider, usePostHog } from "posthog-react-native";
 import { useEffect } from "react";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import "../global.css";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
@@ -34,6 +35,7 @@ function NavigationTracker() {
 function UserTracker() {
   const posthog = usePostHog();
   const { user, isLoaded } = useUser();
+  const selectedLanguage = useLanguageStore((s) => s.selectedLanguage);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -44,10 +46,14 @@ function UserTracker() {
         $set: {
           ...(email && { email }),
           ...(name && { name }),
+          preferred_language: selectedLanguage,
+        },
+        $set_once: {
+          signup_date: new Date().toISOString(),
         },
       });
     }
-  }, [isLoaded, user, posthog]);
+  }, [isLoaded, user, posthog, selectedLanguage]);
 
   return null;
 }

@@ -74,15 +74,11 @@ export default function LearnScreen() {
 
   // Start opens the AI teacher for this lesson, carrying the lesson id so the
   // teacher teaches that lesson's content (goals, vocabulary, phrases).
-  function handleStart(lesson: Lesson) {
-    posthog?.capture("lesson_started", {
-      lesson_id: lesson.id,
-      language_code: code,
-    });
+  function handleStart(lesson: Lesson, lessonNumber: number) {
     setInProgress(lesson.id);
     router.push({
       pathname: "/ai-teacher",
-      params: { lessonId: lesson.id },
+      params: { lessonId: lesson.id, lessonNumber: String(lessonNumber) },
     });
   }
 
@@ -201,7 +197,7 @@ export default function LearnScreen() {
                 status={status}
                 selected={selectedLessonId === lesson.id}
                 onPress={() => handleSelect(lesson)}
-                onStart={() => handleStart(lesson)}
+                onStart={() => handleStart(lesson, index + 1)}
               />
             );
           })}
