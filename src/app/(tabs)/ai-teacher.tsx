@@ -10,6 +10,7 @@ import { usePostHog } from "posthog-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -203,6 +204,21 @@ export default function AITeacherScreen() {
     await endCall();
     dismiss();
   }, [endCall, dismiss, posthog, lesson?.id]);
+
+  // Keep a stable ref so the BackHandler closure always calls the latest version.
+  const leaveAndDismissRef = useRef(leaveAndDismiss);
+  leaveAndDismissRef.current = leaveAndDismiss;
+
+  // Intercept the Android hardware back button while this tab is focused.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        leaveAndDismissRef.current();
+        return true; // consume the event — prevent default back behaviour
+      });
+      return () => sub.remove();
+    }, []),
+  );
 
   if (!lesson) {
     return (
