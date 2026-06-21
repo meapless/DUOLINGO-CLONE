@@ -76,20 +76,25 @@ export async function POST(request: Request) {
 
     // Ask the Vision Agent server to start a session and join the call.
     const agentUrl = getAgentServerUrl();
-    const agentRes = await fetch(`${agentUrl}/calls/${callId}/sessions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        call_type: AUDIO_LESSON_CALL_TYPE,
-        call_id: callId,
-        language_code: languageCode,
-        lesson_title: lessonTitle,
-        goals,
-        vocabulary,
-        phrases,
-        ai_teacher_prompt: aiTeacherPrompt,
-      }),
-    });
+    let agentRes: Response;
+    try {
+      agentRes = await fetch(`${agentUrl}/calls/${callId}/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          call_type: AUDIO_LESSON_CALL_TYPE,
+          call_id: callId,
+          language_code: languageCode,
+          lesson_title: lessonTitle,
+          goals,
+          vocabulary,
+          phrases,
+          ai_teacher_prompt: aiTeacherPrompt,
+        }),
+      });
+    } catch {
+      throw new HttpError(503, "The AI teacher is currently offline. You can still use the lesson audio.");
+    }
 
     if (!agentRes.ok) {
       const err = (await agentRes
@@ -121,10 +126,16 @@ export async function DELETE(request: Request) {
       throw new HttpError(400, "callId and sessionId are required.");
 
     const agentUrl = getAgentServerUrl();
-    const agentRes = await fetch(
-      `${agentUrl}/calls/${callId}/sessions/${sessionId}`,
-      { method: "DELETE" },
-    );
+    let agentRes: Response;
+    try {
+      agentRes = await fetch(
+        `${agentUrl}/calls/${callId}/sessions/${sessionId}`,
+        { method: "DELETE" },
+      );
+    } catch {
+      // Server is down — session is already gone, treat as success.
+      return Response.json({ ok: true });
+    }
 
     // 404 means the session is already gone — treat as success.
     if (!agentRes.ok && agentRes.status !== 404) {

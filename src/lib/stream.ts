@@ -35,14 +35,19 @@ async function authedPost<T>(
     throw new Error("You must be signed in to start an audio lesson.");
   }
 
-  const res = await fetch(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${sessionToken}`,
-    },
-    body: JSON.stringify(body ?? {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch {
+    throw new Error("Could not reach the server. Please check your connection.");
+  }
 
   if (!res.ok) {
     const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -124,14 +129,19 @@ async function authedDelete<T>(
     throw new Error("You must be signed in.");
   }
 
-  const res = await fetch(path, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${sessionToken}`,
-    },
-    body: JSON.stringify(body ?? {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch {
+    throw new Error("Could not reach the server. Please check your connection.");
+  }
 
   if (!res.ok) {
     const data = (await res.json().catch(() => null)) as { error?: string } | null;

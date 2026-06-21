@@ -150,7 +150,7 @@ export default function AITeacherScreen() {
     };
   }, []);
 
-  const { client, call, phase, error, endCall, retry, agentStatus } =
+  const { client, call, phase, error, endCall, retry, agentStatus, agentError } =
     useAudioLessonCall({
       lessonId: lesson?.id,
       languageCode: lessonCode ?? undefined,
@@ -247,6 +247,7 @@ export default function AITeacherScreen() {
           lesson={lesson}
           lessonTitle={lesson.title}
           agentStatus={agentStatus}
+          agentError={agentError}
           onEndCall={leaveAndDismiss}
           onRetry={retry}
         />
@@ -259,12 +260,14 @@ function CallBoundView({
   lesson,
   lessonTitle,
   agentStatus,
+  agentError,
   onEndCall,
   onRetry,
 }: {
   lesson: Lesson;
   lessonTitle: string;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
+  agentError: string | null;
   onEndCall: () => void;
   onRetry: () => void;
 }) {
@@ -357,6 +360,7 @@ function CallBoundView({
       lessonTitle={lessonTitle}
       status={status}
       agentStatus={agentStatus}
+      agentError={agentError}
       errorMessage={null}
       micEnabled={micStatus === "enabled"}
       isSpeakingWhileMuted={isSpeakingWhileMuted}
@@ -375,6 +379,7 @@ function AudioLessonView({
   lessonTitle,
   status,
   agentStatus,
+  agentError,
   errorMessage,
   micEnabled,
   isSpeakingWhileMuted,
@@ -389,6 +394,7 @@ function AudioLessonView({
   lessonTitle?: string;
   status: ConnectionStatus;
   agentStatus: import("@/hooks/useAudioLessonCall").AgentStatus;
+  agentError?: string | null;
   errorMessage: string | null;
   micEnabled: boolean;
   isSpeakingWhileMuted: boolean;
@@ -522,28 +528,38 @@ function AudioLessonView({
                 </Text>
               </View>
             ) : (
-              <View
-                style={[styles.agentPill, { borderColor: agentMeta.color }]}
-              >
-                {agentStatus === "connecting" ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={agentMeta.color}
-                    style={{ marginRight: 6 }}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.agentDot,
-                      { backgroundColor: agentMeta.color },
-                    ]}
-                  />
-                )}
-                <Text
-                  style={[styles.agentPillText, { color: agentMeta.color }]}
+              <View className="items-center">
+                <View
+                  style={[styles.agentPill, { borderColor: agentMeta.color }]}
                 >
-                  {agentMeta.label}
-                </Text>
+                  {agentStatus === "connecting" ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={agentMeta.color}
+                      style={{ marginRight: 6 }}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.agentDot,
+                        { backgroundColor: agentMeta.color },
+                      ]}
+                    />
+                  )}
+                  <Text
+                    style={[styles.agentPillText, { color: agentMeta.color }]}
+                  >
+                    {agentMeta.label}
+                  </Text>
+                </View>
+                {agentStatus === "failed" && agentError ? (
+                  <Text
+                    className="mt-1.5 font-poppins text-caption text-center px-6"
+                    style={{ color: colors.neutral.textSecondary }}
+                  >
+                    {agentError}
+                  </Text>
+                ) : null}
               </View>
             )}
           </View>

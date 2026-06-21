@@ -64,6 +64,7 @@ export function useAudioLessonCall({
   const [nonce, setNonce] = useState(0); // bump to retry
 
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   // Keep the latest Clerk helpers/display info in refs so the connect effect
   // doesn't re-run (and rebuild the client) just because their identity changed.
@@ -96,8 +97,8 @@ export function useAudioLessonCall({
     agentSessionRef.current = null;
     try {
       await stopAgentSession(ctx.current.getToken, session);
-    } catch (e) {
-      console.error("agent stop failed", e);
+    } catch {
+      // Server may be offline — session will expire on its own.
     }
   }, []);
 
@@ -113,6 +114,7 @@ export function useAudioLessonCall({
         setPhase("connecting");
         setError(null);
         setAgentStatus("idle");
+        setAgentError(null);
 
         const { getToken: getClerkToken, name, image } = ctx.current;
         const display = { name, image };
@@ -172,6 +174,7 @@ export function useAudioLessonCall({
         if (cancelled) return;
 
         setPhase("ready");
+        setAgentError(null);
 
         // 4. Start the Vision Agent so the AI teacher joins the call.
         setAgentStatus("connecting");
@@ -192,13 +195,17 @@ export function useAudioLessonCall({
             };
             setAgentStatus("connected");
           } else if (!cancelled) {
-            // Agent started but no session id returned — mark failed so user knows.
             setAgentStatus("failed");
+            setAgentError("AI teacher unavailable. You can still use the lesson.");
           }
         } catch (agentErr) {
           if (!cancelled) {
-            console.error("agent start failed", agentErr);
+            const msg =
+              agentErr instanceof Error
+                ? agentErr.message
+                : "AI teacher unavailable. You can still use the lesson.";
             setAgentStatus("failed");
+            setAgentError(msg);
           }
         }
       } catch (err) {
@@ -221,6 +228,7 @@ export function useAudioLessonCall({
       setCall(undefined);
       setClient(undefined);
       setAgentStatus("idle");
+      setAgentError(null);
     };
   }, [isSignedIn, lessonId, languageCode, lessonTitle, nonce, stopAgent,
       // Intentionally excluded: goals/vocabulary/phrases/aiTeacherPrompt — these
@@ -244,5 +252,5 @@ export function useAudioLessonCall({
     setNonce((n) => n + 1);
   }, []);
 
-  return { client, call, phase, error, endCall, retry, agentStatus } as const;
+  return { client, call, phase, error, endCall, retry, agentStatus, agentError } as const;
 }
